@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>lr2rt Preview</title>
+    <style>
+      :root {
+        --bg: #f6f4ed;
+        --panel: #fffdf7;
+        --text: #1e2126;
+        --accent: #005f73;
+        --accent-2: #ee9b00;
+        --muted: #5b636a;
+        --ok: #2a9d8f;
+        --warn: #bc6c25;
+        --border: #d9d2c3;
+      }
+      body {
+        margin: 0;
+        font-family: "IBM Plex Sans", "Avenir Next", sans-serif;
+        background: radial-gradient(circle at top right, #ffe8d6 0%, var(--bg) 35%, #e9f4f2 100%);
+        color: var(--text);
+      }
+      .wrap {
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 24px;
+      }
+      .title {
+        font-family: "Space Grotesk", "Avenir Next", sans-serif;
+        letter-spacing: 0.02em;
+        margin-bottom: 8px;
+      }
+      .summary {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 12px;
+        margin: 18px 0 24px;
+      }
+      .card {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 12px;
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.04);
+      }
+      .label {
+        color: var(--muted);
+        font-size: 0.85rem;
+      }
+      .value {
+        font-family: "Space Mono", monospace;
+        font-size: 1.2rem;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        overflow: hidden;
+      }
+      th, td {
+        text-align: left;
+        padding: 10px;
+        border-bottom: 1px solid #efe8d9;
+        vertical-align: top;
+      }
+      th {
+        background: linear-gradient(90deg, rgba(0,95,115,0.08), rgba(238,155,0,0.08));
+      }
+      .chip {
+        display: inline-block;
+        border-radius: 999px;
+        padding: 3px 8px;
+        font-size: 0.76rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+      .chip.ok { background: rgba(42,157,143,0.14); color: var(--ok); }
+      .chip.warn { background: rgba(188,108,37,0.14); color: var(--warn); }
+      .panes {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 12px;
+        margin-top: 18px;
+      }
+      ul {
+        margin: 0;
+        padding-left: 18px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <h1 class="title">lr2rt Conversion Preview</h1>
+      <p><strong>Input:</strong> /Users/benjaminknobloch/GitHub_Repositories/PhotoTools/tools/lightroom_to_rawtherapee/tests/fixtures/sample_preset.xmp<br /><strong>Profile:</strong> balanced</p>
+
+      <section class="summary">
+        <div class="card"><div class="label">Mapped</div><div class="value">9</div></div>
+        <div class="card"><div class="label">Warnings</div><div class="value">1</div></div>
+        <div class="card"><div class="label">Unmapped Keys</div><div class="value">1</div></div>
+      </section>
+
+      <table>
+        <thead>
+          <tr><th>Source</th><th>RawTherapee Target</th><th>Output</th><th>Origin</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>Exposure2012</code><br><small>0.35</small></td><td><code>Exposure/Compensation</code></td><td><strong>0.350</strong></td><td><span class="chip ok">source</span></td></tr>
+<tr><td><code>Contrast2012</code><br><small>15</small></td><td><code>Exposure/Contrast</code></td><td><strong>12</strong></td><td><span class="chip ok">source</span></td></tr>
+<tr><td><code>Blacks2012</code><br><small>-8</small></td><td><code>Exposure/Black</code></td><td><strong>-8</strong></td><td><span class="chip ok">source</span></td></tr>
+<tr><td><code>Temperature</code><br><small>6200</small></td><td><code>White Balance/Temperature</code></td><td><strong>6200</strong></td><td><span class="chip ok">source</span></td></tr>
+<tr><td><code>Tint</code><br><small>10</small></td><td><code>White Balance/Green</code></td><td><strong>1.100</strong></td><td><span class="chip ok">source</span></td></tr>
+<tr><td><code>Highlights2012</code><br><small>-18</small></td><td><code>Shadows &amp; Highlights/Highlights</code></td><td><strong>-14</strong></td><td><span class="chip ok">source</span></td></tr>
+<tr><td><code>Shadows2012</code><br><small>22</small></td><td><code>Shadows &amp; Highlights/Shadows</code></td><td><strong>18</strong></td><td><span class="chip ok">source</span></td></tr>
+<tr><td><code>Clarity2012</code><br><small>12</small></td><td><code>Luminance Curve/Contrast</code></td><td><strong>10</strong></td><td><span class="chip ok">source</span></td></tr>
+<tr><td><code>Vibrance</code><br><small>18</small></td><td><code>Vibrance/Saturated</code></td><td><strong>18</strong></td><td><span class="chip ok">source</span></td></tr>
+        </tbody>
+      </table>
+
+      <section class="panes">
+        <div class="card">
+          <h2>Warnings</h2>
+          <ul><li><strong>MISSING_SOURCE</strong>: Saturation missing in input metadata. Mapping skipped.</li></ul>
+        </div>
+        <div class="card">
+          <h2>Unmapped Lightroom Keys</h2>
+          <ul><li><code>Texture</code></li></ul>
+        </div>
+      </section>
+    </div>
+  </body>
+</html>

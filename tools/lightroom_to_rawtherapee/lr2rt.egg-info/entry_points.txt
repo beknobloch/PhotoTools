@@ -1,0 +1,3 @@
+[console_scripts]
+lr2rt = lr2rt.cli:main
+lr2rt-gui = lr2rt.gui:main

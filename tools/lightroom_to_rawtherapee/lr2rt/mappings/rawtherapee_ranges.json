@@ -1,0 +1,424 @@
+{
+  "schema_version": 1,
+  "sections": {
+    "Exposure": {
+      "Compensation": {
+        "kind": "float",
+        "min": -5.0,
+        "max": 12.0,
+        "default": 0.0,
+        "step": 0.001
+      },
+      "Brightness": {
+        "kind": "int",
+        "min": -100,
+        "max": 100,
+        "default": 0
+      },
+      "Contrast": {
+        "kind": "int",
+        "min": -100,
+        "max": 100,
+        "default": 0
+      },
+      "Saturation": {
+        "kind": "int",
+        "min": -100,
+        "max": 100,
+        "default": 0
+      },
+      "Black": {
+        "kind": "int",
+        "min": -16384,
+        "max": 32768,
+        "default": 0
+      },
+      "HighlightCompr": {
+        "kind": "int",
+        "min": 0,
+        "max": 500,
+        "default": 0
+      },
+      "HighlightComprThreshold": {
+        "kind": "int",
+        "min": 0,
+        "max": 100,
+        "default": 0
+      },
+      "ShadowCompr": {
+        "kind": "int",
+        "min": 0,
+        "max": 100,
+        "default": 50
+      }
+    },
+    "White Balance": {
+      "Temperature": {
+        "kind": "int",
+        "min": 1500,
+        "max": 60000,
+        "default": 6500
+      },
+      "Green": {
+        "kind": "float",
+        "min": 0.039,
+        "max": 100.0,
+        "default": 1.0,
+        "step": 0.001
+      },
+      "Equal": {
+        "kind": "float",
+        "min": 0.5,
+        "max": 2.0,
+        "default": 1.0,
+        "step": 0.001
+      }
+    },
+    "Shadows & Highlights": {
+      "Highlights": {
+        "kind": "int",
+        "min": 0,
+        "max": 100,
+        "default": 0
+      },
+      "Shadows": {
+        "kind": "int",
+        "min": 0,
+        "max": 100,
+        "default": 0
+      },
+      "HighlightTonalWidth": {
+        "kind": "int",
+        "min": 10,
+        "max": 100,
+        "default": 70
+      },
+      "ShadowTonalWidth": {
+        "kind": "int",
+        "min": 10,
+        "max": 100,
+        "default": 30
+      },
+      "Radius": {
+        "kind": "int",
+        "min": 1,
+        "max": 100,
+        "default": 40
+      }
+    },
+    "Luminance Curve": {
+      "Brightness": {
+        "kind": "int",
+        "min": -100,
+        "max": 100,
+        "default": 0
+      },
+      "Contrast": {
+        "kind": "int",
+        "min": -100,
+        "max": 100,
+        "default": 0
+      },
+      "Chromaticity": {
+        "kind": "int",
+        "min": -100,
+        "max": 100,
+        "default": 0
+      }
+    },
+    "Local Contrast": {
+      "Amount": {
+        "kind": "float",
+        "min": 0.0,
+        "max": 2.0,
+        "default": 0.2,
+        "step": 0.001
+      }
+    },
+    "PostDemosaicSharpening": {
+      "Contrast": {
+        "kind": "int",
+        "min": 0,
+        "max": 200,
+        "default": 20
+      }
+    },
+    "SharpenMicro": {
+      "Strength": {
+        "kind": "int",
+        "min": 0,
+        "max": 100,
+        "default": 20
+      }
+    },
+    "Sharpening": {
+      "Radius": {
+        "kind": "float",
+        "min": 0.2,
+        "max": 3.0,
+        "default": 0.5,
+        "step": 0.001
+      },
+      "BlurRadius": {
+        "kind": "float",
+        "min": 0.2,
+        "max": 2.0,
+        "default": 0.2,
+        "step": 0.001
+      },
+      "Contrast": {
+        "kind": "int",
+        "min": 0,
+        "max": 200,
+        "default": 20
+      },
+      "Amount": {
+        "kind": "int",
+        "min": 1,
+        "max": 1000,
+        "default": 200
+      }
+    },
+    "Vibrance": {
+      "Pastels": {
+        "kind": "int",
+        "min": -100,
+        "max": 100,
+        "default": 0
+      },
+      "Saturated": {
+        "kind": "int",
+        "min": -100,
+        "max": 100,
+        "default": 0
+      }
+    },
+    "Dehaze": {
+      "Strength": {
+        "kind": "int",
+        "min": 0,
+        "max": 100,
+        "default": 50
+      }
+    },
+    "Directional Pyramid Denoising": {
+      "Luma": {
+        "kind": "int",
+        "min": 0,
+        "max": 100,
+        "default": 0
+      },
+      "Ldetail": {
+        "kind": "int",
+        "min": 0,
+        "max": 100,
+        "default": 0
+      },
+      "Chroma": {
+        "kind": "int",
+        "min": 0,
+        "max": 100,
+        "default": 15
+      }
+    },
+    "ColorToning": {
+      "Balance": {
+        "kind": "int",
+        "min": -100,
+        "max": 100,
+        "default": 0
+      },
+      "Strength": {
+        "kind": "int",
+        "min": 0,
+        "max": 100,
+        "default": 50
+      }
+    },
+    "PCVignette": {
+      "Strength": {
+        "kind": "float",
+        "min": 0.0,
+        "max": 1.5,
+        "default": 0.0,
+        "step": 0.001
+      },
+      "Feather": {
+        "kind": "int",
+        "min": 0,
+        "max": 100,
+        "default": 50
+      },
+      "Roundness": {
+        "kind": "int",
+        "min": 0,
+        "max": 100,
+        "default": 50
+      }
+    },
+    "Vignetting Correction": {
+      "Amount": {
+        "kind": "int",
+        "min": -100,
+        "max": 100,
+        "default": 0
+      }
+    },
+    "Distortion": {
+      "Amount": {
+        "kind": "int",
+        "min": -100,
+        "max": 100,
+        "default": 0
+      }
+    },
+    "Perspective": {
+      "Horizontal": {
+        "kind": "int",
+        "min": -100,
+        "max": 100,
+        "default": 0
+      },
+      "Vertical": {
+        "kind": "int",
+        "min": -100,
+        "max": 100,
+        "default": 0
+      },
+      "CameraShiftHorizontal": {
+        "kind": "float",
+        "min": -100.0,
+        "max": 100.0,
+        "default": 0.0,
+        "step": 0.01
+      },
+      "CameraShiftVertical": {
+        "kind": "float",
+        "min": -100.0,
+        "max": 100.0,
+        "default": 0.0,
+        "step": 0.01
+      }
+    },
+    "Rotation": {
+      "Degree": {
+        "kind": "float",
+        "min": -45.0,
+        "max": 45.0,
+        "default": 0.0,
+        "step": 0.001
+      }
+    },
+    "Defringing": {
+      "Threshold": {
+        "kind": "int",
+        "min": 0,
+        "max": 100,
+        "default": 13
+      }
+    },
+    "ToneEqualizer": {
+      "Band0": {
+        "kind": "int",
+        "min": -100,
+        "max": 100,
+        "default": 0
+      },
+      "Band1": {
+        "kind": "int",
+        "min": -100,
+        "max": 100,
+        "default": 0
+      },
+      "Band2": {
+        "kind": "int",
+        "min": -100,
+        "max": 100,
+        "default": 0
+      },
+      "Band3": {
+        "kind": "int",
+        "min": -100,
+        "max": 100,
+        "default": 0
+      },
+      "Band4": {
+        "kind": "int",
+        "min": -100,
+        "max": 100,
+        "default": 0
+      },
+      "Pivot": {
+        "kind": "float",
+        "min": -12.0,
+        "max": 12.0,
+        "default": 0.0,
+        "step": 0.001
+      },
+      "Regularization": {
+        "kind": "float",
+        "min": -5.0,
+        "max": 5.0,
+        "default": 0.0,
+        "step": 0.001
+      }
+    },
+    "Directional Pyramid Equalizer": {
+      "Mult0": {
+        "kind": "float",
+        "min": 0.0,
+        "max": 4.0,
+        "default": 1.0,
+        "step": 0.001
+      },
+      "Mult1": {
+        "kind": "float",
+        "min": 0.0,
+        "max": 4.0,
+        "default": 1.0,
+        "step": 0.001
+      },
+      "Mult2": {
+        "kind": "float",
+        "min": 0.0,
+        "max": 4.0,
+        "default": 1.0,
+        "step": 0.001
+      },
+      "Mult3": {
+        "kind": "float",
+        "min": 0.0,
+        "max": 4.0,
+        "default": 1.0,
+        "step": 0.001
+      },
+      "Mult4": {
+        "kind": "float",
+        "min": 0.0,
+        "max": 4.0,
+        "default": 1.0,
+        "step": 0.001
+      },
+      "Mult5": {
+        "kind": "float",
+        "min": 0.0,
+        "max": 4.0,
+        "default": 1.0,
+        "step": 0.001
+      },
+      "Threshold": {
+        "kind": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "default": 0.2,
+        "step": 0.001
+      },
+      "Skinprotect": {
+        "kind": "int",
+        "min": -100,
+        "max": 100,
+        "default": 0
+      }
+    }
+  }
+}

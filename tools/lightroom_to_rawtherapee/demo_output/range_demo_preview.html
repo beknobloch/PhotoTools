@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>lr2rt Preview</title>
+    <style>
+      :root {
+        --bg: #f6f4ed;
+        --panel: #fffdf7;
+        --text: #1e2126;
+        --accent: #005f73;
+        --accent-2: #ee9b00;
+        --muted: #5b636a;
+        --ok: #2a9d8f;
+        --warn: #bc6c25;
+        --border: #d9d2c3;
+      }
+      body {
+        margin: 0;
+        font-family: "IBM Plex Sans", "Avenir Next", sans-serif;
+        background: radial-gradient(circle at top right, #ffe8d6 0%, var(--bg) 35%, #e9f4f2 100%);
+        color: var(--text);
+      }
+      .wrap {
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 24px;
+      }
+      .title {
+        font-family: "Space Grotesk", "Avenir Next", sans-serif;
+        letter-spacing: 0.02em;
+        margin-bottom: 8px;
+      }
+      .summary {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 12px;
+        margin: 18px 0 24px;
+      }
+      .card {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 12px;
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.04);
+      }
+      .label {
+        color: var(--muted);
+        font-size: 0.85rem;
+      }
+      .value {
+        font-family: "Space Mono", monospace;
+        font-size: 1.2rem;
+      }
+      .note {
+        margin: -10px 0 14px;
+        color: var(--muted);
+        font-size: 0.84rem;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        overflow: hidden;
+      }
+      th, td {
+        text-align: left;
+        padding: 10px;
+        border-bottom: 1px solid #efe8d9;
+        vertical-align: top;
+      }
+      th {
+        background: linear-gradient(90deg, rgba(0,95,115,0.08), rgba(238,155,0,0.08));
+      }
+      .mapping-row td:first-child {
+        border-left: 4px solid var(--group-color);
+      }
+      .mapping-row.group-start td {
+        padding-top: 16px;
+      }
+      .mapping-row.group-end td {
+        padding-bottom: 16px;
+      }
+      .mapping-row.group-single td {
+        padding-top: 14px;
+        padding-bottom: 14px;
+      }
+      .chip {
+        display: inline-block;
+        border-radius: 999px;
+        padding: 3px 8px;
+        font-size: 0.76rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+      .chip.ok { background: rgba(42,157,143,0.14); color: var(--ok); }
+      .chip.warn { background: rgba(188,108,37,0.14); color: var(--warn); }
+      .range-meta {
+        margin-top: 6px;
+      }
+      .range-track {
+        position: relative;
+        height: 8px;
+        width: 100%;
+        border-radius: 999px;
+        background: linear-gradient(90deg, rgba(0,95,115,0.18), rgba(238,155,0,0.18));
+      }
+      .range-marker {
+        position: absolute;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        border-radius: 999px;
+      }
+      .range-marker.range-value {
+        width: 12px;
+        height: 12px;
+        background: var(--accent);
+        border: 2px solid #fff;
+        box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.14);
+      }
+      .range-marker.range-default {
+        width: 8px;
+        height: 8px;
+        background: transparent;
+        border: 2px solid var(--muted);
+        box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.7);
+      }
+      .range-meta small {
+        display: block;
+        color: var(--muted);
+        margin-top: 4px;
+        font-size: 0.74rem;
+      }
+      .range-meta .range-track + small {
+        margin: 0;
+      }
+      .panes {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 12px;
+        margin-top: 18px;
+      }
+      ul {
+        margin: 0;
+        padding-left: 18px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <h1 class="title">lr2rt Conversion Preview</h1>
+      <p><strong>Input:</strong> /Users/benjaminknobloch/GitHub_Repositories/PhotoTools/tools/lightroom_to_rawtherapee/tests/fixtures/sample_preset.xmp<br /><strong>Profile:</strong> balanced</p>
+
+      <section class="summary">
+        <div class="card"><div class="label">Mapped</div><div class="value">26</div></div>
+        <div class="card"><div class="label">Warnings</div><div class="value">0</div></div>
+        <div class="card"><div class="label">Unmapped Keys</div><div class="value">0</div></div>
+      </section>
+      <p class="note">Hidden enable-toggle rows: 8</p>
+
+      <table>
+        <thead>
+          <tr><th>Source</th><th>RawTherapee Target</th><th>Output</th><th>Origin</th></tr>
+        </thead>
+        <tbody>
+          <tr class="mapping-row group-start" style="--group-color: hsl(139 50% 42%);"><td><code>Exposure2012</code><br><small>0.200</small></td><td><code>Exposure/Compensation</code></td><td><strong>0.200</strong><div class="range-meta"><div class="range-track"><span class="range-marker range-default" style="left: 29.4118%;"></span><span class="range-marker range-value" style="left: 30.5882%;"></span></div><small>min -5.000 · default 0.000 · max 12.000</small></div></td><td><span class="chip ok">source</span></td></tr>
+<tr class="mapping-row group-mid" style="--group-color: hsl(139 50% 42%);"><td><code>Contrast2012</code><br><small>8</small></td><td><code>Exposure/Contrast</code></td><td><strong>6</strong><div class="range-meta"><div class="range-track"><span class="range-marker range-default" style="left: 50.0000%;"></span><span class="range-marker range-value" style="left: 53.0000%;"></span></div><small>min -100 · default 0 · max 100</small></div></td><td><span class="chip ok">source</span></td></tr>
+<tr class="mapping-row group-mid" style="--group-color: hsl(139 50% 42%);"><td><code>Saturation</code><br><small>4</small></td><td><code>Exposure/Saturation</code></td><td><strong>4</strong><div class="range-meta"><div class="range-track"><span class="range-marker range-default" style="left: 50.0000%;"></span><span class="range-marker range-value" style="left: 52.0000%;"></span></div><small>min -100 · default 0 · max 100</small></div></td><td><span class="chip ok">source</span></td></tr>
+<tr class="mapping-row group-mid" style="--group-color: hsl(139 50% 42%);"><td><code>Blacks2012</code><br><small>-4</small></td><td><code>Exposure/Black</code></td><td><strong>-4</strong><div class="range-meta"><div class="range-track"><span class="range-marker range-default" style="left: 33.3333%;"></span><span class="range-marker range-value" style="left: 33.3252%;"></span></div><small>min -16384 · default 0 · max 32768</small></div></td><td><span class="chip ok">source</span></td></tr>
+<tr class="mapping-row group-mid" style="--group-color: hsl(139 50% 42%);"><td><code>Whites2012</code><br><small>8</small></td><td><code>Exposure/HighlightComprThreshold</code></td><td><strong>8</strong><div class="range-meta"><div class="range-track"><span class="range-marker range-default" style="left: 0.0000%;"></span><span class="range-marker range-value" style="left: 8.0000%;"></span></div><small>min 0 · default 0 · max 100</small></div></td><td><span class="chip ok">source</span></td></tr>
+<tr class="mapping-row group-mid" style="--group-color: hsl(139 50% 42%);"><td><code>Highlights2012</code><br><small>-10</small></td><td><code>Exposure/HighlightCompr</code></td><td><strong>10</strong><div class="range-meta"><div class="range-track"><span class="range-marker range-default" style="left: 0.0000%;"></span><span class="range-marker range-value" style="left: 2.0000%;"></span></div><small>min 0 · default 0 · max 500</small></div></td><td><span class="chip ok">source</span></td></tr>
+<tr class="mapping-row group-end" style="--group-color: hsl(139 50% 42%);"><td><code>Shadows2012</code><br><small>12</small></td><td><code>Exposure/ShadowCompr</code></td><td><strong>56</strong><div class="range-meta"><div class="range-track"><span class="range-marker range-default" style="left: 50.0000%;"></span><span class="range-marker range-value" style="left: 56.0000%;"></span></div><small>min 0 · default 50 · max 100</small></div></td><td><span class="chip ok">source</span></td></tr>
+<tr class="mapping-row group-start" style="--group-color: hsl(66 50% 42%);"><td><code>Highlights2012</code><br><small>-10</small></td><td><code>Shadows &amp; Highlights/Highlights</code></td><td><strong>8</strong><div class="range-meta"><div class="range-track"><span class="range-marker range-default" style="left: 0.0000%;"></span><span class="range-marker range-value" style="left: 8.0000%;"></span></div><small>min 0 · default 0 · max 100</small></div></td><td><span class="chip ok">source</span></td></tr>
+<tr class="mapping-row group-end" style="--group-color: hsl(66 50% 42%);"><td><code>Shadows2012</code><br><small>12</small></td><td><code>Shadows &amp; Highlights/Shadows</code></td><td><strong>10</strong><div class="range-meta"><div class="range-track"><span class="range-marker range-default" style="left: 0.0000%;"></span><span class="range-marker range-value" style="left: 10.0000%;"></span></div><small>min 0 · default 0 · max 100</small></div></td><td><span class="chip ok">source</span></td></tr>
+<tr class="mapping-row group-start" style="--group-color: hsl(143 50% 42%);"><td><code>Temperature</code><br><small>5600</small></td><td><code>White Balance/Temperature</code></td><td><strong>5600</strong><div class="range-meta"><div class="range-track"><span class="range-marker range-default" style="left: 8.5470%;"></span><span class="range-marker range-value" style="left: 7.0085%;"></span></div><small>min 1500 · default 6500 · max 60000</small></div></td><td><span class="chip ok">source</span></td></tr>
+<tr class="mapping-row group-mid" style="--group-color: hsl(143 50% 42%);"><td><code>Temperature</code><br><small>5600</small></td><td><code>White Balance/Setting</code></td><td><strong>Custom</strong></td><td><span class="chip ok">source</span></td></tr>
+<tr class="mapping-row group-mid" style="--group-color: hsl(143 50% 42%);"><td><code>Tint</code><br><small>5.000</small></td><td><code>White Balance/Green</code></td><td><strong>0.980</strong><div class="range-meta"><div class="range-track"><span class="range-marker range-default" style="left: 0.9614%;"></span><span class="range-marker range-value" style="left: 0.9414%;"></span></div><small>min 0.039 · default 1.000 · max 100.000</small></div></td><td><span class="chip ok">source</span></td></tr>
+<tr class="mapping-row group-end" style="--group-color: hsl(143 50% 42%);"><td><code>Tint</code><br><small>5</small></td><td><code>White Balance/Setting</code></td><td><strong>Custom</strong></td><td><span class="chip ok">source</span></td></tr>
+<tr class="mapping-row group-single" style="--group-color: hsl(33 50% 42%);"><td><code>Clarity2012</code><br><small>6</small></td><td><code>Luminance Curve/Contrast</code></td><td><strong>5</strong><div class="range-meta"><div class="range-track"><span class="range-marker range-default" style="left: 50.0000%;"></span><span class="range-marker range-value" style="left: 52.5000%;"></span></div><small>min -100 · default 0 · max 100</small></div></td><td><span class="chip ok">source</span></td></tr>
+<tr class="mapping-row group-single" style="--group-color: hsl(289 50% 42%);"><td><code>Clarity2012</code><br><small>6.000</small></td><td><code>Local Contrast/Amount</code></td><td><strong>0.060</strong><div class="range-meta"><div class="range-track"><span class="range-marker range-default" style="left: 10.0000%;"></span><span class="range-marker range-value" style="left: 3.0000%;"></span></div><small>min 0.000 · default 0.200 · max 2.000</small></div></td><td><span class="chip ok">source</span></td></tr>
+<tr class="mapping-row group-single" style="--group-color: hsl(106 50% 42%);"><td><code>Clarity2012</code><br><small>6</small></td><td><code>PostDemosaicSharpening/Contrast</code></td><td><strong>7</strong><div class="range-meta"><div class="range-track"><span class="range-marker range-default" style="left: 10.0000%;"></span><span class="range-marker range-value" style="left: 3.5000%;"></span></div><small>min 0 · default 20 · max 200</small></div></td><td><span class="chip ok">source</span></td></tr>
+<tr class="mapping-row group-single" style="--group-color: hsl(147 50% 42%);"><td><code>Texture</code><br><small>8</small></td><td><code>SharpenMicro/Strength</code></td><td><strong>8</strong><div class="range-meta"><div class="range-track"><span class="range-marker range-default" style="left: 20.0000%;"></span><span class="range-marker range-value" style="left: 8.0000%;"></span></div><small>min 0 · default 20 · max 100</small></div></td><td><span class="chip ok">source</span></td></tr>
+<tr class="mapping-row group-start" style="--group-color: hsl(90 50% 42%);"><td><code>Vibrance</code><br><small>10</small></td><td><code>Vibrance/Pastels</code></td><td><strong>10</strong><div class="range-meta"><div class="range-track"><span class="range-marker range-default" style="left: 50.0000%;"></span><span class="range-marker range-value" style="left: 55.0000%;"></span></div><small>min -100 · default 0 · max 100</small></div></td><td><span class="chip ok">source</span></td></tr>
+<tr class="mapping-row group-end" style="--group-color: hsl(90 50% 42%);"><td><code>Vibrance</code><br><small>10</small></td><td><code>Vibrance/Saturated</code></td><td><strong>10</strong><div class="range-meta"><div class="range-track"><span class="range-marker range-default" style="left: 50.0000%;"></span><span class="range-marker range-value" style="left: 55.0000%;"></span></div><small>min -100 · default 0 · max 100</small></div></td><td><span class="chip ok">source</span></td></tr>
+<tr class="mapping-row group-single" style="--group-color: hsl(233 50% 42%);"><td><code>Dehaze</code><br><small>6</small></td><td><code>Dehaze/Strength</code></td><td><strong>6</strong><div class="range-meta"><div class="range-track"><span class="range-marker range-default" style="left: 50.0000%;"></span><span class="range-marker range-value" style="left: 6.0000%;"></span></div><small>min 0 · default 50 · max 100</small></div></td><td><span class="chip ok">source</span></td></tr>
+<tr class="mapping-row group-start" style="--group-color: hsl(319 50% 42%);"><td><code>SharpenRadius</code><br><small>0.800</small></td><td><code>Sharpening/Radius</code></td><td><strong>0.800</strong><div class="range-meta"><div class="range-track"><span class="range-marker range-default" style="left: 10.7143%;"></span><span class="range-marker range-value" style="left: 21.4286%;"></span></div><small>min 0.200 · default 0.500 · max 3.000</small></div></td><td><span class="chip ok">source</span></td></tr>
+<tr class="mapping-row group-mid" style="--group-color: hsl(319 50% 42%);"><td><code>SharpenDetail</code><br><small>30</small></td><td><code>Sharpening/Contrast</code></td><td><strong>30</strong><div class="range-meta"><div class="range-track"><span class="range-marker range-default" style="left: 10.0000%;"></span><span class="range-marker range-value" style="left: 15.0000%;"></span></div><small>min 0 · default 20 · max 200</small></div></td><td><span class="chip ok">source</span></td></tr>
+<tr class="mapping-row group-end" style="--group-color: hsl(319 50% 42%);"><td><code>Sharpness</code><br><small>25</small></td><td><code>Sharpening/Amount</code></td><td><strong>50</strong><div class="range-meta"><div class="range-track"><span class="range-marker range-default" style="left: 19.9199%;"></span><span class="range-marker range-value" style="left: 4.9049%;"></span></div><small>min 1 · default 200 · max 1000</small></div></td><td><span class="chip ok">source</span></td></tr>
+<tr class="mapping-row group-start" style="--group-color: hsl(332 50% 42%);"><td><code>ColorNoiseReduction</code><br><small>12</small></td><td><code>Directional Pyramid Denoising/Chroma</code></td><td><strong>12</strong><div class="range-meta"><div class="range-track"><span class="range-marker range-default" style="left: 15.0000%;"></span><span class="range-marker range-value" style="left: 12.0000%;"></span></div><small>min 0 · default 15 · max 100</small></div></td><td><span class="chip ok">source</span></td></tr>
+<tr class="mapping-row group-mid" style="--group-color: hsl(332 50% 42%);"><td><code>LuminanceSmoothing</code><br><small>10</small></td><td><code>Directional Pyramid Denoising/Luma</code></td><td><strong>10</strong><div class="range-meta"><div class="range-track"><span class="range-marker range-default" style="left: 0.0000%;"></span><span class="range-marker range-value" style="left: 10.0000%;"></span></div><small>min 0 · default 0 · max 100</small></div></td><td><span class="chip ok">source</span></td></tr>
+<tr class="mapping-row group-end" style="--group-color: hsl(332 50% 42%);"><td><code>LuminanceNoiseReductionDetail</code><br><small>20</small></td><td><code>Directional Pyramid Denoising/Ldetail</code></td><td><strong>20</strong><div class="range-meta"><div class="range-track"><span class="range-marker range-default" style="left: 0.0000%;"></span><span class="range-marker range-value" style="left: 20.0000%;"></span></div><small>min 0 · default 0 · max 100</small></div></td><td><span class="chip ok">source</span></td></tr>
+        </tbody>
+      </table>
+
+      <section class="panes">
+        <div class="card">
+          <h2>Warnings</h2>
+          <ul><li>None</li></ul>
+        </div>
+        <div class="card">
+          <h2>Unmapped Lightroom Keys</h2>
+          <ul><li>None</li></ul>
+        </div>
+      </section>
+    </div>
+  </body>
+</html>

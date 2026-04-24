@@ -1,0 +1,29 @@
+[project]
+name = "lr2rt"
+version = "0.1.0"
+description = "Convert Adobe Lightroom presets (.xmp/.dng) into RawTherapee profiles (.pp3)."
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "PhotoTools" }]
+dependencies = []
+
+[project.scripts]
+lr2rt = "lr2rt.cli:main"
+lr2rt-gui = "lr2rt.gui:main"
+
+[project.optional-dependencies]
+gui = ["tkinterdnd2>=0.4.3"]
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = {"" = "."}
+include-package-data = true
+
+[tool.setuptools.packages.find]
+include = ["lr2rt*"]
+
+[tool.setuptools.package-data]
+"lr2rt.mappings" = ["*.json"]
