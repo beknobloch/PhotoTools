@@ -23,8 +23,10 @@ class ConversionTests(unittest.TestCase):
         self.assertEqual(result.warnings, [])
         self.assertEqual(result.unmapped_source_keys, [])
         self.assertEqual(result.pp3_sections["Exposure"]["Compensation"], "0.200")
-        self.assertEqual(result.pp3_sections["Exposure"]["HighlightCompr"], "10")
-        self.assertEqual(result.pp3_sections["Exposure"]["ShadowCompr"], "56")
+        self.assertEqual(result.pp3_sections["Exposure"]["HighlightCompr"], "0")
+        self.assertEqual(result.pp3_sections["Exposure"]["ShadowCompr"], "50")
+        self.assertEqual(result.pp3_sections["Shadows & Highlights"]["Highlights"], "8")
+        self.assertEqual(result.pp3_sections["Shadows & Highlights"]["Shadows"], "10")
         self.assertEqual(result.pp3_sections["White Balance"]["Temperature"], "5600")
         self.assertEqual(result.pp3_sections["White Balance"]["Setting"], "Custom")
         self.assertEqual(result.pp3_sections["Luminance Curve"]["Contrast"], "0")
@@ -179,8 +181,12 @@ class ConversionTests(unittest.TestCase):
         self.assertEqual(result_neg.pp3_sections["Shadows & Highlights"]["Shadows"], "24")
         self.assertEqual(result_pos.pp3_sections["Shadows & Highlights"]["Highlights"], "0")
         self.assertEqual(result_pos.pp3_sections["Shadows & Highlights"]["Shadows"], "0")
+        self.assertEqual(result_neg.pp3_sections["Exposure"]["HighlightCompr"], "0")
+        self.assertEqual(result_neg.pp3_sections["Exposure"]["ShadowCompr"], "50")
+        self.assertEqual(result_pos.pp3_sections["Exposure"]["HighlightCompr"], "0")
+        self.assertEqual(result_pos.pp3_sections["Exposure"]["ShadowCompr"], "50")
 
-    def test_parametric_tone_keys_are_left_unmapped_in_balanced_profile(self) -> None:
+    def test_parametric_tone_keys_map_to_tone_equalizer_in_balanced_profile(self) -> None:
         config = load_default_config()
         engine = MappingEngine(config, profile_name="balanced")
         settings = LightroomSettings(
@@ -191,17 +197,29 @@ class ConversionTests(unittest.TestCase):
                 "ParametricDarks": 30,
                 "ParametricLights": -50,
                 "ParametricHighlights": 10,
+                "ParametricShadowSplit": 20,
                 "ParametricMidtoneSplit": 60,
+                "ParametricHighlightSplit": 80,
             },
         )
 
         result = engine.convert(settings)
-        self.assertNotIn("ToneEqualizer", result.pp3_sections)
-        self.assertIn("ParametricShadows", result.unmapped_source_keys)
-        self.assertIn("ParametricDarks", result.unmapped_source_keys)
-        self.assertIn("ParametricLights", result.unmapped_source_keys)
-        self.assertIn("ParametricHighlights", result.unmapped_source_keys)
-        self.assertIn("ParametricMidtoneSplit", result.unmapped_source_keys)
+        self.assertEqual(result.pp3_sections["ToneEqualizer"]["Enabled"], "true")
+        self.assertEqual(result.pp3_sections["ToneEqualizer"]["Band0"], "-20")
+        self.assertEqual(result.pp3_sections["ToneEqualizer"]["Band1"], "30")
+        self.assertEqual(result.pp3_sections["ToneEqualizer"]["Band2"], "-50")
+        self.assertEqual(result.pp3_sections["ToneEqualizer"]["Band3"], "10")
+        self.assertEqual(result.pp3_sections["ToneEqualizer"]["Band4"], "0")
+        self.assertEqual(result.pp3_sections["ToneEqualizer"]["Band5"], "0")
+        self.assertEqual(result.pp3_sections["ToneEqualizer"]["Regularization"], "1")
+        self.assertEqual(result.pp3_sections["ToneEqualizer"]["Pivot"], "2.4")
+        self.assertNotIn("ParametricShadows", result.unmapped_source_keys)
+        self.assertNotIn("ParametricDarks", result.unmapped_source_keys)
+        self.assertNotIn("ParametricLights", result.unmapped_source_keys)
+        self.assertNotIn("ParametricHighlights", result.unmapped_source_keys)
+        self.assertNotIn("ParametricShadowSplit", result.unmapped_source_keys)
+        self.assertNotIn("ParametricMidtoneSplit", result.unmapped_source_keys)
+        self.assertNotIn("ParametricHighlightSplit", result.unmapped_source_keys)
 
     def test_conservative_and_aggressive_profiles_are_tuned_around_balanced(self) -> None:
         settings = parse_xmp_file(FIXTURE_XMP, CAMERA_RAW_NS)

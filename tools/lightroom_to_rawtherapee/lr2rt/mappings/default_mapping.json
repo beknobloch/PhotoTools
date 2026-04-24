@@ -190,6 +190,17 @@
       "Threshold": "0.200",
       "Skinprotect": "0",
       "Hueskin": "-5;25;170;120;"
+    },
+    "ToneEqualizer": {
+      "Enabled": "false",
+      "Band0": "0",
+      "Band1": "0",
+      "Band2": "0",
+      "Band3": "0",
+      "Band4": "0",
+      "Band5": "0",
+      "Regularization": "0",
+      "Pivot": "0"
     }
   },
   "profiles": {
@@ -293,28 +304,6 @@
         {
           "source": "Highlights2012",
           "target": {
-            "section": "Exposure",
-            "key": "HighlightCompr"
-          },
-          "optional": true,
-          "transforms": [
-            {
-              "type": "invert",
-              "pivot": 0
-            },
-            {
-              "type": "clamp",
-              "min": 0,
-              "max": 500
-            }
-          ],
-          "output": {
-            "type": "int"
-          }
-        },
-        {
-          "source": "Highlights2012",
-          "target": {
             "section": "Shadows & Highlights",
             "key": "Highlights"
           },
@@ -361,26 +350,166 @@
           }
         },
         {
-          "source": "Shadows2012",
+          "source": "ParametricShadows",
           "target": {
-            "section": "Exposure",
-            "key": "ShadowCompr"
+            "section": "ToneEqualizer",
+            "key": "Band0"
           },
           "optional": true,
           "transforms": [
             {
               "type": "linear",
-              "scale": 0.5,
-              "offset": 50
+              "scale": 1.0
             },
             {
               "type": "clamp",
-              "min": 0,
+              "min": -100,
               "max": 100
             }
           ],
           "output": {
             "type": "int"
+          }
+        },
+        {
+          "source": "ParametricDarks",
+          "target": {
+            "section": "ToneEqualizer",
+            "key": "Band1"
+          },
+          "optional": true,
+          "transforms": [
+            {
+              "type": "linear",
+              "scale": 1.0
+            },
+            {
+              "type": "clamp",
+              "min": -100,
+              "max": 100
+            }
+          ],
+          "output": {
+            "type": "int"
+          }
+        },
+        {
+          "source": "ParametricLights",
+          "target": {
+            "section": "ToneEqualizer",
+            "key": "Band2"
+          },
+          "optional": true,
+          "transforms": [
+            {
+              "type": "linear",
+              "scale": 1.0
+            },
+            {
+              "type": "clamp",
+              "min": -100,
+              "max": 100
+            }
+          ],
+          "output": {
+            "type": "int"
+          }
+        },
+        {
+          "source": "ParametricHighlights",
+          "target": {
+            "section": "ToneEqualizer",
+            "key": "Band3"
+          },
+          "optional": true,
+          "transforms": [
+            {
+              "type": "linear",
+              "scale": 1.0
+            },
+            {
+              "type": "clamp",
+              "min": -100,
+              "max": 100
+            }
+          ],
+          "output": {
+            "type": "int"
+          }
+        },
+        {
+          "source": "ParametricMidtoneSplit",
+          "target": {
+            "section": "ToneEqualizer",
+            "key": "Pivot"
+          },
+          "optional": true,
+          "transforms": [
+            {
+              "type": "linear",
+              "scale": 0.24,
+              "offset": -12.0
+            },
+            {
+              "type": "clamp",
+              "min": -12.0,
+              "max": 12.0
+            }
+          ],
+          "output": {
+            "type": "float",
+            "precision": 3,
+            "trim_trailing_zeros": true
+          }
+        },
+        {
+          "sources": [
+            "ParametricShadowSplit",
+            "ParametricHighlightSplit"
+          ],
+          "target": {
+            "section": "ToneEqualizer",
+            "key": "Regularization"
+          },
+          "optional": true,
+          "transforms": [
+            {
+              "type": "lr_parametric_split_to_regularization",
+              "shadow_key": "ParametricShadowSplit",
+              "highlight_key": "ParametricHighlightSplit",
+              "default_width": 50.0,
+              "scale": 0.1
+            },
+            {
+              "type": "clamp",
+              "min": -5.0,
+              "max": 5.0
+            }
+          ],
+          "output": {
+            "type": "int"
+          }
+        },
+        {
+          "sources": [
+            "ParametricShadows",
+            "ParametricDarks",
+            "ParametricLights",
+            "ParametricHighlights"
+          ],
+          "target": {
+            "section": "ToneEqualizer",
+            "key": "Enabled"
+          },
+          "optional": true,
+          "transforms": [
+            {
+              "type": "any_nonzero",
+              "threshold": 0.0
+            }
+          ],
+          "output": {
+            "type": "bool"
           }
         },
         {
@@ -1629,28 +1758,6 @@
         {
           "source": "Highlights2012",
           "target": {
-            "section": "Exposure",
-            "key": "HighlightCompr"
-          },
-          "optional": true,
-          "transforms": [
-            {
-              "type": "invert",
-              "pivot": 0
-            },
-            {
-              "type": "clamp",
-              "min": 0,
-              "max": 500
-            }
-          ],
-          "output": {
-            "type": "int"
-          }
-        },
-        {
-          "source": "Highlights2012",
-          "target": {
             "section": "Shadows & Highlights",
             "key": "Highlights"
           },
@@ -1697,26 +1804,166 @@
           }
         },
         {
-          "source": "Shadows2012",
+          "source": "ParametricShadows",
           "target": {
-            "section": "Exposure",
-            "key": "ShadowCompr"
+            "section": "ToneEqualizer",
+            "key": "Band0"
           },
           "optional": true,
           "transforms": [
             {
               "type": "linear",
-              "scale": 0.42,
-              "offset": 50.0
+              "scale": 0.85
             },
             {
               "type": "clamp",
-              "min": 0,
+              "min": -100,
               "max": 100
             }
           ],
           "output": {
             "type": "int"
+          }
+        },
+        {
+          "source": "ParametricDarks",
+          "target": {
+            "section": "ToneEqualizer",
+            "key": "Band1"
+          },
+          "optional": true,
+          "transforms": [
+            {
+              "type": "linear",
+              "scale": 0.85
+            },
+            {
+              "type": "clamp",
+              "min": -100,
+              "max": 100
+            }
+          ],
+          "output": {
+            "type": "int"
+          }
+        },
+        {
+          "source": "ParametricLights",
+          "target": {
+            "section": "ToneEqualizer",
+            "key": "Band2"
+          },
+          "optional": true,
+          "transforms": [
+            {
+              "type": "linear",
+              "scale": 0.85
+            },
+            {
+              "type": "clamp",
+              "min": -100,
+              "max": 100
+            }
+          ],
+          "output": {
+            "type": "int"
+          }
+        },
+        {
+          "source": "ParametricHighlights",
+          "target": {
+            "section": "ToneEqualizer",
+            "key": "Band3"
+          },
+          "optional": true,
+          "transforms": [
+            {
+              "type": "linear",
+              "scale": 0.85
+            },
+            {
+              "type": "clamp",
+              "min": -100,
+              "max": 100
+            }
+          ],
+          "output": {
+            "type": "int"
+          }
+        },
+        {
+          "source": "ParametricMidtoneSplit",
+          "target": {
+            "section": "ToneEqualizer",
+            "key": "Pivot"
+          },
+          "optional": true,
+          "transforms": [
+            {
+              "type": "linear",
+              "scale": 0.2,
+              "offset": -10.0
+            },
+            {
+              "type": "clamp",
+              "min": -12.0,
+              "max": 12.0
+            }
+          ],
+          "output": {
+            "type": "float",
+            "precision": 3,
+            "trim_trailing_zeros": true
+          }
+        },
+        {
+          "sources": [
+            "ParametricShadowSplit",
+            "ParametricHighlightSplit"
+          ],
+          "target": {
+            "section": "ToneEqualizer",
+            "key": "Regularization"
+          },
+          "optional": true,
+          "transforms": [
+            {
+              "type": "lr_parametric_split_to_regularization",
+              "shadow_key": "ParametricShadowSplit",
+              "highlight_key": "ParametricHighlightSplit",
+              "default_width": 50.0,
+              "scale": 0.08
+            },
+            {
+              "type": "clamp",
+              "min": -5.0,
+              "max": 5.0
+            }
+          ],
+          "output": {
+            "type": "int"
+          }
+        },
+        {
+          "sources": [
+            "ParametricShadows",
+            "ParametricDarks",
+            "ParametricLights",
+            "ParametricHighlights"
+          ],
+          "target": {
+            "section": "ToneEqualizer",
+            "key": "Enabled"
+          },
+          "optional": true,
+          "transforms": [
+            {
+              "type": "any_nonzero",
+              "threshold": 0.0
+            }
+          ],
+          "output": {
+            "type": "bool"
           }
         },
         {
@@ -3000,28 +3247,6 @@
         {
           "source": "Highlights2012",
           "target": {
-            "section": "Exposure",
-            "key": "HighlightCompr"
-          },
-          "optional": true,
-          "transforms": [
-            {
-              "type": "invert",
-              "pivot": 0
-            },
-            {
-              "type": "clamp",
-              "min": 0,
-              "max": 500
-            }
-          ],
-          "output": {
-            "type": "int"
-          }
-        },
-        {
-          "source": "Highlights2012",
-          "target": {
             "section": "Shadows & Highlights",
             "key": "Highlights"
           },
@@ -3068,26 +3293,166 @@
           }
         },
         {
-          "source": "Shadows2012",
+          "source": "ParametricShadows",
           "target": {
-            "section": "Exposure",
-            "key": "ShadowCompr"
+            "section": "ToneEqualizer",
+            "key": "Band0"
           },
           "optional": true,
           "transforms": [
             {
               "type": "linear",
-              "scale": 0.55,
-              "offset": 50.0
+              "scale": 1.15
             },
             {
               "type": "clamp",
-              "min": 0,
+              "min": -100,
               "max": 100
             }
           ],
           "output": {
             "type": "int"
+          }
+        },
+        {
+          "source": "ParametricDarks",
+          "target": {
+            "section": "ToneEqualizer",
+            "key": "Band1"
+          },
+          "optional": true,
+          "transforms": [
+            {
+              "type": "linear",
+              "scale": 1.15
+            },
+            {
+              "type": "clamp",
+              "min": -100,
+              "max": 100
+            }
+          ],
+          "output": {
+            "type": "int"
+          }
+        },
+        {
+          "source": "ParametricLights",
+          "target": {
+            "section": "ToneEqualizer",
+            "key": "Band2"
+          },
+          "optional": true,
+          "transforms": [
+            {
+              "type": "linear",
+              "scale": 1.15
+            },
+            {
+              "type": "clamp",
+              "min": -100,
+              "max": 100
+            }
+          ],
+          "output": {
+            "type": "int"
+          }
+        },
+        {
+          "source": "ParametricHighlights",
+          "target": {
+            "section": "ToneEqualizer",
+            "key": "Band3"
+          },
+          "optional": true,
+          "transforms": [
+            {
+              "type": "linear",
+              "scale": 1.15
+            },
+            {
+              "type": "clamp",
+              "min": -100,
+              "max": 100
+            }
+          ],
+          "output": {
+            "type": "int"
+          }
+        },
+        {
+          "source": "ParametricMidtoneSplit",
+          "target": {
+            "section": "ToneEqualizer",
+            "key": "Pivot"
+          },
+          "optional": true,
+          "transforms": [
+            {
+              "type": "linear",
+              "scale": 0.28,
+              "offset": -14.000000000000002
+            },
+            {
+              "type": "clamp",
+              "min": -12.0,
+              "max": 12.0
+            }
+          ],
+          "output": {
+            "type": "float",
+            "precision": 3,
+            "trim_trailing_zeros": true
+          }
+        },
+        {
+          "sources": [
+            "ParametricShadowSplit",
+            "ParametricHighlightSplit"
+          ],
+          "target": {
+            "section": "ToneEqualizer",
+            "key": "Regularization"
+          },
+          "optional": true,
+          "transforms": [
+            {
+              "type": "lr_parametric_split_to_regularization",
+              "shadow_key": "ParametricShadowSplit",
+              "highlight_key": "ParametricHighlightSplit",
+              "default_width": 50.0,
+              "scale": 0.12
+            },
+            {
+              "type": "clamp",
+              "min": -5.0,
+              "max": 5.0
+            }
+          ],
+          "output": {
+            "type": "int"
+          }
+        },
+        {
+          "sources": [
+            "ParametricShadows",
+            "ParametricDarks",
+            "ParametricLights",
+            "ParametricHighlights"
+          ],
+          "target": {
+            "section": "ToneEqualizer",
+            "key": "Enabled"
+          },
+          "optional": true,
+          "transforms": [
+            {
+              "type": "any_nonzero",
+              "threshold": 0.0
+            }
+          ],
+          "output": {
+            "type": "bool"
           }
         },
         {

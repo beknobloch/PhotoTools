@@ -240,6 +240,20 @@ def _apply_transform(value: Any, transform: dict[str, Any]) -> Any:
         threshold = float(transform.get("threshold", 0.0))
         return _is_nonzeroish(value, threshold)
 
+    if transform_type == "lr_parametric_split_to_regularization":
+        if not isinstance(value, dict):
+            raise TypeError("lr_parametric_split_to_regularization expects object input from mapping.sources")
+
+        shadow_key = str(transform.get("shadow_key", "ParametricShadowSplit"))
+        highlight_key = str(transform.get("highlight_key", "ParametricHighlightSplit"))
+        default_width = float(transform.get("default_width", 50.0))
+        scale = float(transform.get("scale", 0.1))
+
+        shadow_split = _to_float(value[shadow_key])
+        highlight_split = _to_float(value[highlight_key])
+        width = highlight_split - shadow_split
+        return (width - default_width) * scale
+
     raise ValueError(f"Unknown transform type {transform_type!r}")
 
 
@@ -254,7 +268,12 @@ def _format_output(value: Any, output_cfg: dict[str, Any] | None) -> str:
         return str(int(round(_to_float(value))))
     if output_type == "float":
         precision = int(output_cfg.get("precision", 3))
-        return f"{_to_float(value):.{precision}f}"
+        formatted = f"{_to_float(value):.{precision}f}"
+        if bool(output_cfg.get("trim_trailing_zeros", False)):
+            formatted = formatted.rstrip("0").rstrip(".")
+            if formatted in {"-0", "-0.0", ""}:
+                formatted = "0"
+        return formatted
     if output_type == "bool":
         return "true" if bool(value) else "false"
     raise ValueError(f"Unknown output type {output_type!r}")
