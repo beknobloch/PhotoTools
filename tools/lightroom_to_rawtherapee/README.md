@@ -18,7 +18,7 @@ Direct translation between Lightroom and RawTherapee settings is approximate. Th
   - `.xmp` Lightroom preset files
   - `.dng` mobile presets (extracts embedded XMP packet)
 - Writes `.pp3` output
-- Supports mapping profiles (`balanced`, `conservative`, `aggressive`, `punchy`)
+- Supports mapping profiles (`balanced`, `conservative`, `aggressive`)
 - Includes broader default mapping coverage for:
   - exposure/highlights/shadows/white balance
   - clarity/texture/dehaze
