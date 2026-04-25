@@ -238,8 +238,8 @@
     "PCVignette": {
       "Strength": {
         "kind": "float",
-        "min": 0.0,
-        "max": 1.5,
+        "min": -6.0,
+        "max": 6.0,
         "default": 0.0,
         "step": 0.001
       },

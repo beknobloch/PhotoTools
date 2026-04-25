@@ -115,6 +115,126 @@ class ConversionTests(unittest.TestCase):
         self.assertEqual(result.pp3_sections["ColorToning"]["HighlightsColorSaturation"], "12;40;")
         self.assertEqual(result.pp3_sections["ColorToning"]["ShadowsColorSaturation"], "22;210;")
 
+    def test_balanced_profile_maps_color_grading_and_color_noise_detail_tags(self) -> None:
+        settings = LightroomSettings(
+            source_path=Path("/tmp/color_grade_and_noise.xmp"),
+            source_format="xmp",
+            values={
+                "ColorGradeGlobalHue": 200,
+                "ColorGradeGlobalSat": 40,
+                "ColorGradeGlobalLum": 10,
+                "ColorGradeHighlightLum": 25,
+                "ColorGradeMidtoneHue": 35,
+                "ColorGradeMidtoneLum": -15,
+                "ColorGradeMidtoneSat": 20,
+                "ColorGradeShadowLum": 30,
+                "ColorNoiseReductionDetail": 70,
+                "ColorNoiseReductionSmoothness": 65,
+            },
+        )
+        config = load_default_config()
+        engine = MappingEngine(config, profile_name="balanced")
+
+        result = engine.convert(settings)
+
+        self.assertEqual(result.pp3_sections["ColorToning"]["Enabled"], "true")
+        self.assertEqual(result.pp3_sections["ColorToning"]["HighlightsColorSaturation"], "40;200;")
+        self.assertEqual(result.pp3_sections["ColorToning"]["ShadowsColorSaturation"], "20;35;")
+        self.assertEqual(result.pp3_sections["Luminance Curve"]["Brightness"], "10")
+        self.assertEqual(result.pp3_sections["Exposure"]["Brightness"], "-15")
+        self.assertEqual(result.pp3_sections["Shadows & Highlights"]["Highlights"], "25")
+        self.assertEqual(result.pp3_sections["Shadows & Highlights"]["Shadows"], "30")
+        self.assertEqual(result.pp3_sections["Directional Pyramid Denoising"]["Enabled"], "true")
+        self.assertEqual(result.pp3_sections["Directional Pyramid Denoising"]["Ldetail"], "70")
+        self.assertEqual(result.pp3_sections["Directional Pyramid Denoising"]["Chroma"], "65")
+
+    def test_color_grading_and_color_noise_defaults_or_out_of_range_do_not_enable_tools(self) -> None:
+        settings = LightroomSettings(
+            source_path=Path("/tmp/default_or_invalid_color_grade_noise.xmp"),
+            source_format="xmp",
+            values={
+                "ColorGradeGlobalHue": 200,
+                "ColorGradeGlobalSat": 0,
+                "ColorGradeGlobalLum": 0,
+                "ColorGradeHighlightLum": -20,
+                "ColorGradeMidtoneHue": 400,
+                "ColorGradeMidtoneLum": 0,
+                "ColorGradeMidtoneSat": 0,
+                "ColorGradeShadowLum": -5,
+                "ColorNoiseReductionDetail": 50,
+                "ColorNoiseReductionSmoothness": -10,
+            },
+        )
+        config = load_default_config()
+        engine = MappingEngine(config, profile_name="balanced")
+
+        result = engine.convert(settings)
+
+        self.assertEqual(result.pp3_sections["ColorToning"]["Enabled"], "false")
+        self.assertEqual(result.pp3_sections["ColorToning"]["HighlightsColorSaturation"], "0;0;")
+        self.assertEqual(result.pp3_sections["ColorToning"]["ShadowsColorSaturation"], "0;0;")
+        self.assertEqual(result.pp3_sections["Luminance Curve"]["Brightness"], "0")
+        self.assertEqual(result.pp3_sections["Exposure"]["Brightness"], "0")
+        self.assertEqual(result.pp3_sections["Shadows & Highlights"]["Highlights"], "0")
+        self.assertEqual(result.pp3_sections["Shadows & Highlights"]["Shadows"], "0")
+        self.assertEqual(result.pp3_sections["Directional Pyramid Denoising"]["Enabled"], "false")
+        self.assertEqual(result.pp3_sections["Directional Pyramid Denoising"]["Ldetail"], "0")
+        self.assertEqual(result.pp3_sections["Directional Pyramid Denoising"]["Chroma"], "15")
+
+    def test_post_crop_vignette_strength_preserves_sign_and_clamps_to_rt_range(self) -> None:
+        settings = LightroomSettings(
+            source_path=Path("/tmp/vignette.xmp"),
+            source_format="xmp",
+            values={
+                "PostCropVignetteAmount": -50,
+                "PostCropVignetteFeather": 120,
+                "PostCropVignetteRoundness": -120,
+            },
+        )
+        config = load_default_config()
+        engine = MappingEngine(config, profile_name="balanced")
+
+        result = engine.convert(settings)
+
+        self.assertEqual(result.pp3_sections["PCVignette"]["Strength"], "-3.000")
+        self.assertEqual(result.pp3_sections["PCVignette"]["Feather"], "100")
+        self.assertEqual(result.pp3_sections["PCVignette"]["Roundness"], "0")
+        self.assertEqual(result.pp3_sections["PCVignette"]["Enabled"], "true")
+
+    def test_defringe_zero_or_invalid_values_do_not_override_threshold_or_enable_tool(self) -> None:
+        settings = LightroomSettings(
+            source_path=Path("/tmp/defringe_default.xmp"),
+            source_format="xmp",
+            values={
+                "DefringePurpleAmount": 0,
+                "DefringeGreenAmount": -20,
+            },
+        )
+        config = load_default_config()
+        engine = MappingEngine(config, profile_name="balanced")
+
+        result = engine.convert(settings)
+
+        self.assertEqual(result.pp3_sections["Defringing"]["Threshold"], "13")
+        self.assertEqual(result.pp3_sections["Defringing"]["Enabled"], "false")
+
+    def test_defringe_valid_non_default_values_map_and_enable_tool(self) -> None:
+        settings = LightroomSettings(
+            source_path=Path("/tmp/defringe_active.xmp"),
+            source_format="xmp",
+            values={
+                "DefringePurpleAmount": 8,
+                "DefringeGreenAmount": 5,
+            },
+        )
+        config = load_default_config()
+        engine = MappingEngine(config, profile_name="balanced")
+
+        result = engine.convert(settings)
+
+        self.assertEqual(result.pp3_sections["Defringing"]["Threshold"], "16")
+        self.assertEqual(result.pp3_sections["Defringing"]["Enabled"], "true")
+
     def test_missing_white_balance_keys_do_not_inject_temperature_or_green(self) -> None:
         settings = LightroomSettings(
             source_path=Path("/tmp/no_wb.xmp"),
@@ -205,11 +325,11 @@ class ConversionTests(unittest.TestCase):
 
         result = engine.convert(settings)
         self.assertEqual(result.pp3_sections["ToneEqualizer"]["Enabled"], "true")
-        self.assertEqual(result.pp3_sections["ToneEqualizer"]["Band0"], "-20")
-        self.assertEqual(result.pp3_sections["ToneEqualizer"]["Band1"], "30")
-        self.assertEqual(result.pp3_sections["ToneEqualizer"]["Band2"], "-50")
-        self.assertEqual(result.pp3_sections["ToneEqualizer"]["Band3"], "10")
-        self.assertEqual(result.pp3_sections["ToneEqualizer"]["Band4"], "0")
+        self.assertEqual(result.pp3_sections["ToneEqualizer"]["Band0"], "-4")
+        self.assertEqual(result.pp3_sections["ToneEqualizer"]["Band1"], "-6")
+        self.assertEqual(result.pp3_sections["ToneEqualizer"]["Band2"], "2")
+        self.assertEqual(result.pp3_sections["ToneEqualizer"]["Band3"], "-30")
+        self.assertEqual(result.pp3_sections["ToneEqualizer"]["Band4"], "8")
         self.assertEqual(result.pp3_sections["ToneEqualizer"]["Band5"], "0")
         self.assertEqual(result.pp3_sections["ToneEqualizer"]["Regularization"], "1")
         self.assertEqual(result.pp3_sections["ToneEqualizer"]["Pivot"], "2.4")

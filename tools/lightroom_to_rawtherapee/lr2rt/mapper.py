@@ -9,6 +9,7 @@ from lr2rt.models import ConversionResult, ConversionWarning, LightroomSettings,
 from lr2rt.ranges import RangeCatalog, clamp_to_value_range, get_value_range, load_default_range_catalog
 
 _NUMBER_RE = re.compile(r"[+-]?\d+(?:\.\d+)?")
+_SKIP_MAPPING = object()
 
 
 def _clamp(value: float, minimum: float, maximum: float) -> float:
@@ -125,6 +126,19 @@ def _apply_transform(value: Any, transform: dict[str, Any]) -> Any:
         offset = float(transform.get("offset", 0.0))
         return numeric * scale + offset
 
+    if transform_type == "weighted_sum":
+        if not isinstance(value, dict):
+            raise TypeError("weighted_sum transform expects object input from mapping.sources")
+
+        weights_cfg = transform.get("weights")
+        if not isinstance(weights_cfg, dict) or not weights_cfg:
+            raise ValueError("weighted_sum transform requires a non-empty weights object")
+
+        total = 0.0
+        for source_key, weight in weights_cfg.items():
+            total += _to_float(value[source_key]) * float(weight)
+        return total
+
     if transform_type == "clamp":
         numeric = _to_float(value)
         minimum = float(transform.get("min", numeric))
@@ -146,6 +160,69 @@ def _apply_transform(value: Any, transform: dict[str, Any]) -> Any:
 
     if transform_type == "abs":
         return abs(_to_float(value))
+
+    if transform_type == "skip_if_default":
+        numeric = _to_float(value)
+        default_value = float(transform.get("value", 0.0))
+        epsilon = float(transform.get("epsilon", 1e-9))
+        if abs(numeric - default_value) <= epsilon:
+            return _SKIP_MAPPING
+        return numeric
+
+    if transform_type == "skip_if_outside":
+        numeric = _to_float(value)
+        minimum = float(transform.get("min", float("-inf")))
+        maximum = float(transform.get("max", float("inf")))
+        if numeric < minimum or numeric > maximum:
+            return _SKIP_MAPPING
+        return numeric
+
+    if transform_type == "skip_if_false":
+        return value if bool(value) else _SKIP_MAPPING
+
+    if transform_type == "any_nondefault_in_range":
+        epsilon = float(transform.get("epsilon", 1e-9))
+        defaults_cfg = transform.get("defaults", {})
+        if defaults_cfg is None:
+            defaults_cfg = {}
+        if not isinstance(defaults_cfg, dict):
+            raise ValueError("any_nondefault_in_range defaults must be an object")
+
+        ranges_cfg = transform.get("ranges", {})
+        if ranges_cfg is None:
+            ranges_cfg = {}
+        if not isinstance(ranges_cfg, dict):
+            raise ValueError("any_nondefault_in_range ranges must be an object")
+
+        if isinstance(value, dict):
+            keys_cfg = transform.get("keys")
+            keys = [str(k) for k in keys_cfg] if isinstance(keys_cfg, list) else list(value.keys())
+            any_nondefault = False
+            for key in keys:
+                if key not in value:
+                    continue
+                numeric = _to_float(value[key])
+                range_spec = ranges_cfg.get(key, {})
+                if range_spec is None:
+                    range_spec = {}
+                if not isinstance(range_spec, dict):
+                    raise ValueError("any_nondefault_in_range range specs must be objects")
+                minimum = float(range_spec.get("min", float("-inf")))
+                maximum = float(range_spec.get("max", float("inf")))
+                if numeric < minimum or numeric > maximum:
+                    return False
+                default_value = float(defaults_cfg.get(key, 0.0))
+                if abs(numeric - default_value) > epsilon:
+                    any_nondefault = True
+            return any_nondefault
+
+        numeric = _to_float(value)
+        minimum = float(transform.get("min", float("-inf")))
+        maximum = float(transform.get("max", float("inf")))
+        if numeric < minimum or numeric > maximum:
+            return False
+        default_value = float(transform.get("value", 0.0))
+        return abs(numeric - default_value) > epsilon
 
     if transform_type == "lr_tonecurve_to_rt":
         pairs = _parse_tone_curve_pairs(value)
@@ -228,8 +305,25 @@ def _apply_transform(value: Any, transform: dict[str, Any]) -> Any:
         else:
             raise TypeError("lr_sat_hue_pair transform expects object or two-item list input")
 
-        sat_value = _clamp(sat_value, 0.0, 100.0)
-        hue_value = _clamp(hue_value, 0.0, 360.0)
+        sat_min = float(transform.get("sat_min", 0.0))
+        sat_max = float(transform.get("sat_max", 100.0))
+        hue_min = float(transform.get("hue_min", 0.0))
+        hue_max = float(transform.get("hue_max", 360.0))
+        if bool(transform.get("reject_outside", False)):
+            if sat_value < sat_min or sat_value > sat_max or hue_value < hue_min or hue_value > hue_max:
+                return _SKIP_MAPPING
+
+        sat_scale = float(transform.get("sat_scale", 1.0))
+        sat_value *= sat_scale
+        sat_value = _clamp(sat_value, sat_min, sat_max)
+        hue_value = _clamp(hue_value, hue_min, hue_max)
+
+        if bool(transform.get("skip_if_default_sat", False)):
+            default_sat = float(transform.get("default_sat", 0.0))
+            epsilon = float(transform.get("epsilon", 1e-9))
+            if abs(sat_value - default_sat) <= epsilon:
+                return _SKIP_MAPPING
+
         return f"{int(round(sat_value))};{int(round(hue_value))};"
 
     if transform_type == "any_positive":
@@ -332,7 +426,7 @@ class MappingEngine:
                 return None
 
             source_key = "+".join(source_keys)
-            if used_default:
+            if used_default and not bool(mapping.get("suppress_default_warning", False)):
                 result.warnings.append(
                     ConversionWarning(
                         code="DEFAULT_APPLIED",
@@ -395,8 +489,14 @@ class MappingEngine:
 
             try:
                 transformed_value = source_value
+                skip_mapping = False
                 for transform in mapping.get("transforms", []):
                     transformed_value = _apply_transform(transformed_value, transform)
+                    if transformed_value is _SKIP_MAPPING:
+                        skip_mapping = True
+                        break
+                if skip_mapping:
+                    continue
                 if not mapping.get("skip_target_range_clamp", False):
                     value_range = get_value_range(self.range_catalog, section, key)
                     transformed_value = clamp_to_value_range(transformed_value, value_range)

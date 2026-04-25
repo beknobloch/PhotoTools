@@ -250,8 +250,8 @@
         {
           "source": "Saturation",
           "target": {
-            "section": "Exposure",
-            "key": "Saturation"
+            "section": "Luminance Curve",
+            "key": "Chromaticity"
           },
           "optional": true,
           "transforms": [
@@ -359,7 +359,7 @@
           "transforms": [
             {
               "type": "linear",
-              "scale": 1.0
+              "scale": 0.2
             },
             {
               "type": "clamp",
@@ -372,7 +372,15 @@
           }
         },
         {
-          "source": "ParametricDarks",
+          "sources": [
+            "ParametricShadows",
+            "ParametricDarks"
+          ],
+          "defaults": {
+            "ParametricShadows": 0,
+            "ParametricDarks": 0
+          },
+          "suppress_default_warning": true,
           "target": {
             "section": "ToneEqualizer",
             "key": "Band1"
@@ -380,8 +388,11 @@
           "optional": true,
           "transforms": [
             {
-              "type": "linear",
-              "scale": 1.0
+              "type": "weighted_sum",
+              "weights": {
+                "ParametricShadows": 0.8,
+                "ParametricDarks": 0.35
+              }
             },
             {
               "type": "clamp",
@@ -394,7 +405,15 @@
           }
         },
         {
-          "source": "ParametricLights",
+          "sources": [
+            "ParametricDarks",
+            "ParametricLights"
+          ],
+          "defaults": {
+            "ParametricDarks": 0,
+            "ParametricLights": 0
+          },
+          "suppress_default_warning": true,
           "target": {
             "section": "ToneEqualizer",
             "key": "Band2"
@@ -402,8 +421,44 @@
           "optional": true,
           "transforms": [
             {
-              "type": "linear",
-              "scale": 1.0
+              "type": "weighted_sum",
+              "weights": {
+                "ParametricDarks": 0.65,
+                "ParametricLights": 0.35
+              }
+            },
+            {
+              "type": "clamp",
+              "min": -100,
+              "max": 100
+            }
+          ],
+          "output": {
+            "type": "int"
+          }
+        },
+        {
+          "sources": [
+            "ParametricLights",
+            "ParametricHighlights"
+          ],
+          "defaults": {
+            "ParametricLights": 0,
+            "ParametricHighlights": 0
+          },
+          "suppress_default_warning": true,
+          "target": {
+            "section": "ToneEqualizer",
+            "key": "Band3"
+          },
+          "optional": true,
+          "transforms": [
+            {
+              "type": "weighted_sum",
+              "weights": {
+                "ParametricLights": 0.65,
+                "ParametricHighlights": 0.2
+              }
             },
             {
               "type": "clamp",
@@ -419,13 +474,13 @@
           "source": "ParametricHighlights",
           "target": {
             "section": "ToneEqualizer",
-            "key": "Band3"
+            "key": "Band4"
           },
           "optional": true,
           "transforms": [
             {
               "type": "linear",
-              "scale": 1.0
+              "scale": 0.8
             },
             {
               "type": "clamp",
@@ -923,6 +978,33 @@
           }
         },
         {
+          "source": "ColorNoiseReductionSmoothness",
+          "target": {
+            "section": "Directional Pyramid Denoising",
+            "key": "Chroma"
+          },
+          "optional": true,
+          "transforms": [
+            {
+              "type": "skip_if_outside",
+              "min": 0,
+              "max": 100
+            },
+            {
+              "type": "skip_if_default",
+              "value": 50
+            },
+            {
+              "type": "clamp",
+              "min": 0,
+              "max": 100
+            }
+          ],
+          "output": {
+            "type": "int"
+          }
+        },
+        {
           "source": "ColorNoiseReduction",
           "target": {
             "section": "Directional Pyramid Denoising",
@@ -977,6 +1059,33 @@
           }
         },
         {
+          "source": "ColorNoiseReductionDetail",
+          "target": {
+            "section": "Directional Pyramid Denoising",
+            "key": "Ldetail"
+          },
+          "optional": true,
+          "transforms": [
+            {
+              "type": "skip_if_outside",
+              "min": 0,
+              "max": 100
+            },
+            {
+              "type": "skip_if_default",
+              "value": 50
+            },
+            {
+              "type": "clamp",
+              "min": 0,
+              "max": 100
+            }
+          ],
+          "output": {
+            "type": "int"
+          }
+        },
+        {
           "source": "LuminanceSmoothing",
           "target": {
             "section": "Directional Pyramid Denoising",
@@ -988,6 +1097,50 @@
               "type": "clamp",
               "min": 0,
               "max": 100
+            }
+          ],
+          "output": {
+            "type": "bool"
+          }
+        },
+        {
+          "source": "ColorNoiseReductionDetail",
+          "target": {
+            "section": "Directional Pyramid Denoising",
+            "key": "Enabled"
+          },
+          "optional": true,
+          "transforms": [
+            {
+              "type": "any_nondefault_in_range",
+              "min": 0,
+              "max": 100,
+              "value": 50
+            },
+            {
+              "type": "skip_if_false"
+            }
+          ],
+          "output": {
+            "type": "bool"
+          }
+        },
+        {
+          "source": "ColorNoiseReductionSmoothness",
+          "target": {
+            "section": "Directional Pyramid Denoising",
+            "key": "Enabled"
+          },
+          "optional": true,
+          "transforms": [
+            {
+              "type": "any_nondefault_in_range",
+              "min": 0,
+              "max": 100,
+              "value": 50
+            },
+            {
+              "type": "skip_if_false"
             }
           ],
           "output": {
@@ -1377,6 +1530,206 @@
           }
         },
         {
+          "source": "ColorGradeGlobalLum",
+          "target": {
+            "section": "Luminance Curve",
+            "key": "Brightness"
+          },
+          "optional": true,
+          "transforms": [
+            {
+              "type": "skip_if_outside",
+              "min": -100,
+              "max": 100
+            },
+            {
+              "type": "skip_if_default",
+              "value": 0
+            },
+            {
+              "type": "clamp",
+              "min": -100,
+              "max": 100
+            }
+          ],
+          "output": {
+            "type": "int"
+          }
+        },
+        {
+          "source": "ColorGradeMidtoneLum",
+          "target": {
+            "section": "Exposure",
+            "key": "Brightness"
+          },
+          "optional": true,
+          "transforms": [
+            {
+              "type": "skip_if_outside",
+              "min": -100,
+              "max": 100
+            },
+            {
+              "type": "skip_if_default",
+              "value": 0
+            },
+            {
+              "type": "clamp",
+              "min": -100,
+              "max": 100
+            }
+          ],
+          "output": {
+            "type": "int"
+          }
+        },
+        {
+          "source": "ColorGradeHighlightLum",
+          "target": {
+            "section": "Shadows & Highlights",
+            "key": "Highlights"
+          },
+          "optional": true,
+          "transforms": [
+            {
+              "type": "skip_if_outside",
+              "min": 0,
+              "max": 100
+            },
+            {
+              "type": "skip_if_default",
+              "value": 0
+            },
+            {
+              "type": "clamp",
+              "min": 0,
+              "max": 100
+            }
+          ],
+          "output": {
+            "type": "int"
+          }
+        },
+        {
+          "source": "ColorGradeShadowLum",
+          "target": {
+            "section": "Shadows & Highlights",
+            "key": "Shadows"
+          },
+          "optional": true,
+          "transforms": [
+            {
+              "type": "skip_if_outside",
+              "min": 0,
+              "max": 100
+            },
+            {
+              "type": "skip_if_default",
+              "value": 0
+            },
+            {
+              "type": "clamp",
+              "min": 0,
+              "max": 100
+            }
+          ],
+          "output": {
+            "type": "int"
+          }
+        },
+        {
+          "sources": [
+            "ColorGradeGlobalSat",
+            "ColorGradeGlobalHue"
+          ],
+          "target": {
+            "section": "ColorToning",
+            "key": "HighlightsColorSaturation"
+          },
+          "optional": true,
+          "transforms": [
+            {
+              "type": "lr_sat_hue_pair",
+              "sat_key": "ColorGradeGlobalSat",
+              "hue_key": "ColorGradeGlobalHue",
+              "reject_outside": true,
+              "skip_if_default_sat": true,
+              "default_sat": 0
+            }
+          ],
+          "output": {
+            "type": "raw"
+          }
+        },
+        {
+          "sources": [
+            "ColorGradeMidtoneSat",
+            "ColorGradeMidtoneHue"
+          ],
+          "target": {
+            "section": "ColorToning",
+            "key": "ShadowsColorSaturation"
+          },
+          "optional": true,
+          "transforms": [
+            {
+              "type": "lr_sat_hue_pair",
+              "sat_key": "ColorGradeMidtoneSat",
+              "hue_key": "ColorGradeMidtoneHue",
+              "reject_outside": true,
+              "skip_if_default_sat": true,
+              "default_sat": 0
+            }
+          ],
+          "output": {
+            "type": "raw"
+          }
+        },
+        {
+          "source": "ColorGradeGlobalSat",
+          "target": {
+            "section": "ColorToning",
+            "key": "Enabled"
+          },
+          "optional": true,
+          "transforms": [
+            {
+              "type": "any_nondefault_in_range",
+              "min": 0,
+              "max": 100,
+              "value": 0
+            },
+            {
+              "type": "skip_if_false"
+            }
+          ],
+          "output": {
+            "type": "bool"
+          }
+        },
+        {
+          "source": "ColorGradeMidtoneSat",
+          "target": {
+            "section": "ColorToning",
+            "key": "Enabled"
+          },
+          "optional": true,
+          "transforms": [
+            {
+              "type": "any_nondefault_in_range",
+              "min": 0,
+              "max": 100,
+              "value": 0
+            },
+            {
+              "type": "skip_if_false"
+            }
+          ],
+          "output": {
+            "type": "bool"
+          }
+        },
+        {
           "source": "PostCropVignetteAmount",
           "target": {
             "section": "PCVignette",
@@ -1385,16 +1738,13 @@
           "optional": true,
           "transforms": [
             {
-              "type": "abs"
-            },
-            {
               "type": "linear",
-              "scale": 0.012
+              "scale": 0.06
             },
             {
               "type": "clamp",
-              "min": 0,
-              "max": 1.5
+              "min": -6.0,
+              "max": 6.0
             }
           ],
           "output": {
@@ -1450,11 +1800,6 @@
             "key": "Enabled"
           },
           "optional": true,
-          "transforms": [
-            {
-              "type": "abs"
-            }
-          ],
           "output": {
             "type": "bool"
           }
@@ -1619,6 +1964,15 @@
           "optional": true,
           "transforms": [
             {
+              "type": "skip_if_outside",
+              "min": 0,
+              "max": 100
+            },
+            {
+              "type": "skip_if_default",
+              "value": 0
+            },
+            {
               "type": "linear",
               "scale": 2.0
             },
@@ -1644,7 +1998,28 @@
           "optional": true,
           "transforms": [
             {
-              "type": "any_positive"
+              "type": "any_nondefault_in_range",
+              "keys": [
+                "DefringePurpleAmount",
+                "DefringeGreenAmount"
+              ],
+              "defaults": {
+                "DefringePurpleAmount": 0,
+                "DefringeGreenAmount": 0
+              },
+              "ranges": {
+                "DefringePurpleAmount": {
+                  "min": 0,
+                  "max": 100
+                },
+                "DefringeGreenAmount": {
+                  "min": 0,
+                  "max": 100
+                }
+              }
+            },
+            {
+              "type": "skip_if_false"
             }
           ],
           "output": {
@@ -1699,8 +2074,8 @@
         {
           "source": "Saturation",
           "target": {
-            "section": "Exposure",
-            "key": "Saturation"
+            "section": "Luminance Curve",
+            "key": "Chromaticity"
           },
           "optional": true,
           "transforms": [
@@ -1813,26 +2188,8 @@
           "transforms": [
             {
               "type": "linear",
-              "scale": 0.85
+              "scale": 0.2
             },
-            {
-              "type": "clamp",
-              "min": -100,
-              "max": 100
-            }
-          ],
-          "output": {
-            "type": "int"
-          }
-        },
-        {
-          "source": "ParametricDarks",
-          "target": {
-            "section": "ToneEqualizer",
-            "key": "Band1"
-          },
-          "optional": true,
-          "transforms": [
             {
               "type": "linear",
               "scale": 0.85
@@ -1848,13 +2205,102 @@
           }
         },
         {
-          "source": "ParametricLights",
+          "sources": [
+            "ParametricShadows",
+            "ParametricDarks"
+          ],
+          "defaults": {
+            "ParametricShadows": 0,
+            "ParametricDarks": 0
+          },
+          "suppress_default_warning": true,
+          "target": {
+            "section": "ToneEqualizer",
+            "key": "Band1"
+          },
+          "optional": true,
+          "transforms": [
+            {
+              "type": "weighted_sum",
+              "weights": {
+                "ParametricShadows": 0.8,
+                "ParametricDarks": 0.35
+              }
+            },
+            {
+              "type": "linear",
+              "scale": 0.85
+            },
+            {
+              "type": "clamp",
+              "min": -100,
+              "max": 100
+            }
+          ],
+          "output": {
+            "type": "int"
+          }
+        },
+        {
+          "sources": [
+            "ParametricDarks",
+            "ParametricLights"
+          ],
+          "defaults": {
+            "ParametricDarks": 0,
+            "ParametricLights": 0
+          },
+          "suppress_default_warning": true,
           "target": {
             "section": "ToneEqualizer",
             "key": "Band2"
           },
           "optional": true,
           "transforms": [
+            {
+              "type": "weighted_sum",
+              "weights": {
+                "ParametricDarks": 0.65,
+                "ParametricLights": 0.35
+              }
+            },
+            {
+              "type": "linear",
+              "scale": 0.85
+            },
+            {
+              "type": "clamp",
+              "min": -100,
+              "max": 100
+            }
+          ],
+          "output": {
+            "type": "int"
+          }
+        },
+        {
+          "sources": [
+            "ParametricLights",
+            "ParametricHighlights"
+          ],
+          "defaults": {
+            "ParametricLights": 0,
+            "ParametricHighlights": 0
+          },
+          "suppress_default_warning": true,
+          "target": {
+            "section": "ToneEqualizer",
+            "key": "Band3"
+          },
+          "optional": true,
+          "transforms": [
+            {
+              "type": "weighted_sum",
+              "weights": {
+                "ParametricLights": 0.65,
+                "ParametricHighlights": 0.2
+              }
+            },
             {
               "type": "linear",
               "scale": 0.85
@@ -1873,10 +2319,14 @@
           "source": "ParametricHighlights",
           "target": {
             "section": "ToneEqualizer",
-            "key": "Band3"
+            "key": "Band4"
           },
           "optional": true,
           "transforms": [
+            {
+              "type": "linear",
+              "scale": 0.8
+            },
             {
               "type": "linear",
               "scale": 0.85
@@ -2402,6 +2852,38 @@
           }
         },
         {
+          "source": "ColorNoiseReductionSmoothness",
+          "target": {
+            "section": "Directional Pyramid Denoising",
+            "key": "Chroma"
+          },
+          "optional": true,
+          "transforms": [
+            {
+              "type": "skip_if_outside",
+              "min": 0,
+              "max": 100
+            },
+            {
+              "type": "skip_if_default",
+              "value": 50
+            },
+            {
+              "type": "linear",
+              "scale": 1.1,
+              "offset": 0.0
+            },
+            {
+              "type": "clamp",
+              "min": 0,
+              "max": 100
+            }
+          ],
+          "output": {
+            "type": "int"
+          }
+        },
+        {
           "source": "ColorNoiseReduction",
           "target": {
             "section": "Directional Pyramid Denoising",
@@ -2466,6 +2948,38 @@
           }
         },
         {
+          "source": "ColorNoiseReductionDetail",
+          "target": {
+            "section": "Directional Pyramid Denoising",
+            "key": "Ldetail"
+          },
+          "optional": true,
+          "transforms": [
+            {
+              "type": "skip_if_outside",
+              "min": 0,
+              "max": 100
+            },
+            {
+              "type": "skip_if_default",
+              "value": 50
+            },
+            {
+              "type": "linear",
+              "scale": 1.05,
+              "offset": 0.0
+            },
+            {
+              "type": "clamp",
+              "min": 0,
+              "max": 100
+            }
+          ],
+          "output": {
+            "type": "int"
+          }
+        },
+        {
           "source": "LuminanceSmoothing",
           "target": {
             "section": "Directional Pyramid Denoising",
@@ -2477,6 +2991,50 @@
               "type": "clamp",
               "min": 0,
               "max": 100
+            }
+          ],
+          "output": {
+            "type": "bool"
+          }
+        },
+        {
+          "source": "ColorNoiseReductionDetail",
+          "target": {
+            "section": "Directional Pyramid Denoising",
+            "key": "Enabled"
+          },
+          "optional": true,
+          "transforms": [
+            {
+              "type": "any_nondefault_in_range",
+              "min": 0,
+              "max": 100,
+              "value": 50
+            },
+            {
+              "type": "skip_if_false"
+            }
+          ],
+          "output": {
+            "type": "bool"
+          }
+        },
+        {
+          "source": "ColorNoiseReductionSmoothness",
+          "target": {
+            "section": "Directional Pyramid Denoising",
+            "key": "Enabled"
+          },
+          "optional": true,
+          "transforms": [
+            {
+              "type": "any_nondefault_in_range",
+              "min": 0,
+              "max": 100,
+              "value": 50
+            },
+            {
+              "type": "skip_if_false"
             }
           ],
           "output": {
@@ -2866,6 +3424,206 @@
           }
         },
         {
+          "source": "ColorGradeGlobalLum",
+          "target": {
+            "section": "Luminance Curve",
+            "key": "Brightness"
+          },
+          "optional": true,
+          "transforms": [
+            {
+              "type": "skip_if_outside",
+              "min": -100,
+              "max": 100
+            },
+            {
+              "type": "skip_if_default",
+              "value": 0
+            },
+            {
+              "type": "clamp",
+              "min": -100,
+              "max": 100
+            }
+          ],
+          "output": {
+            "type": "int"
+          }
+        },
+        {
+          "source": "ColorGradeMidtoneLum",
+          "target": {
+            "section": "Exposure",
+            "key": "Brightness"
+          },
+          "optional": true,
+          "transforms": [
+            {
+              "type": "skip_if_outside",
+              "min": -100,
+              "max": 100
+            },
+            {
+              "type": "skip_if_default",
+              "value": 0
+            },
+            {
+              "type": "clamp",
+              "min": -100,
+              "max": 100
+            }
+          ],
+          "output": {
+            "type": "int"
+          }
+        },
+        {
+          "source": "ColorGradeHighlightLum",
+          "target": {
+            "section": "Shadows & Highlights",
+            "key": "Highlights"
+          },
+          "optional": true,
+          "transforms": [
+            {
+              "type": "skip_if_outside",
+              "min": 0,
+              "max": 100
+            },
+            {
+              "type": "skip_if_default",
+              "value": 0
+            },
+            {
+              "type": "clamp",
+              "min": 0,
+              "max": 100
+            }
+          ],
+          "output": {
+            "type": "int"
+          }
+        },
+        {
+          "source": "ColorGradeShadowLum",
+          "target": {
+            "section": "Shadows & Highlights",
+            "key": "Shadows"
+          },
+          "optional": true,
+          "transforms": [
+            {
+              "type": "skip_if_outside",
+              "min": 0,
+              "max": 100
+            },
+            {
+              "type": "skip_if_default",
+              "value": 0
+            },
+            {
+              "type": "clamp",
+              "min": 0,
+              "max": 100
+            }
+          ],
+          "output": {
+            "type": "int"
+          }
+        },
+        {
+          "sources": [
+            "ColorGradeGlobalSat",
+            "ColorGradeGlobalHue"
+          ],
+          "target": {
+            "section": "ColorToning",
+            "key": "HighlightsColorSaturation"
+          },
+          "optional": true,
+          "transforms": [
+            {
+              "type": "lr_sat_hue_pair",
+              "sat_key": "ColorGradeGlobalSat",
+              "hue_key": "ColorGradeGlobalHue",
+              "reject_outside": true,
+              "skip_if_default_sat": true,
+              "default_sat": 0
+            }
+          ],
+          "output": {
+            "type": "raw"
+          }
+        },
+        {
+          "sources": [
+            "ColorGradeMidtoneSat",
+            "ColorGradeMidtoneHue"
+          ],
+          "target": {
+            "section": "ColorToning",
+            "key": "ShadowsColorSaturation"
+          },
+          "optional": true,
+          "transforms": [
+            {
+              "type": "lr_sat_hue_pair",
+              "sat_key": "ColorGradeMidtoneSat",
+              "hue_key": "ColorGradeMidtoneHue",
+              "reject_outside": true,
+              "skip_if_default_sat": true,
+              "default_sat": 0
+            }
+          ],
+          "output": {
+            "type": "raw"
+          }
+        },
+        {
+          "source": "ColorGradeGlobalSat",
+          "target": {
+            "section": "ColorToning",
+            "key": "Enabled"
+          },
+          "optional": true,
+          "transforms": [
+            {
+              "type": "any_nondefault_in_range",
+              "min": 0,
+              "max": 100,
+              "value": 0
+            },
+            {
+              "type": "skip_if_false"
+            }
+          ],
+          "output": {
+            "type": "bool"
+          }
+        },
+        {
+          "source": "ColorGradeMidtoneSat",
+          "target": {
+            "section": "ColorToning",
+            "key": "Enabled"
+          },
+          "optional": true,
+          "transforms": [
+            {
+              "type": "any_nondefault_in_range",
+              "min": 0,
+              "max": 100,
+              "value": 0
+            },
+            {
+              "type": "skip_if_false"
+            }
+          ],
+          "output": {
+            "type": "bool"
+          }
+        },
+        {
           "source": "PostCropVignetteAmount",
           "target": {
             "section": "PCVignette",
@@ -2874,16 +3632,13 @@
           "optional": true,
           "transforms": [
             {
-              "type": "abs"
-            },
-            {
               "type": "linear",
-              "scale": 0.01
+              "scale": 0.05
             },
             {
               "type": "clamp",
-              "min": 0,
-              "max": 1.5
+              "min": -6.0,
+              "max": 6.0
             }
           ],
           "output": {
@@ -2939,11 +3694,6 @@
             "key": "Enabled"
           },
           "optional": true,
-          "transforms": [
-            {
-              "type": "abs"
-            }
-          ],
           "output": {
             "type": "bool"
           }
@@ -3108,6 +3858,15 @@
           "optional": true,
           "transforms": [
             {
+              "type": "skip_if_outside",
+              "min": 0,
+              "max": 100
+            },
+            {
+              "type": "skip_if_default",
+              "value": 0
+            },
+            {
               "type": "linear",
               "scale": 2.0
             },
@@ -3133,7 +3892,28 @@
           "optional": true,
           "transforms": [
             {
-              "type": "any_positive"
+              "type": "any_nondefault_in_range",
+              "keys": [
+                "DefringePurpleAmount",
+                "DefringeGreenAmount"
+              ],
+              "defaults": {
+                "DefringePurpleAmount": 0,
+                "DefringeGreenAmount": 0
+              },
+              "ranges": {
+                "DefringePurpleAmount": {
+                  "min": 0,
+                  "max": 100
+                },
+                "DefringeGreenAmount": {
+                  "min": 0,
+                  "max": 100
+                }
+              }
+            },
+            {
+              "type": "skip_if_false"
             }
           ],
           "output": {
@@ -3188,8 +3968,8 @@
         {
           "source": "Saturation",
           "target": {
-            "section": "Exposure",
-            "key": "Saturation"
+            "section": "Luminance Curve",
+            "key": "Chromaticity"
           },
           "optional": true,
           "transforms": [
@@ -3302,26 +4082,8 @@
           "transforms": [
             {
               "type": "linear",
-              "scale": 1.15
+              "scale": 0.2
             },
-            {
-              "type": "clamp",
-              "min": -100,
-              "max": 100
-            }
-          ],
-          "output": {
-            "type": "int"
-          }
-        },
-        {
-          "source": "ParametricDarks",
-          "target": {
-            "section": "ToneEqualizer",
-            "key": "Band1"
-          },
-          "optional": true,
-          "transforms": [
             {
               "type": "linear",
               "scale": 1.15
@@ -3337,13 +4099,102 @@
           }
         },
         {
-          "source": "ParametricLights",
+          "sources": [
+            "ParametricShadows",
+            "ParametricDarks"
+          ],
+          "defaults": {
+            "ParametricShadows": 0,
+            "ParametricDarks": 0
+          },
+          "suppress_default_warning": true,
+          "target": {
+            "section": "ToneEqualizer",
+            "key": "Band1"
+          },
+          "optional": true,
+          "transforms": [
+            {
+              "type": "weighted_sum",
+              "weights": {
+                "ParametricShadows": 0.8,
+                "ParametricDarks": 0.35
+              }
+            },
+            {
+              "type": "linear",
+              "scale": 1.15
+            },
+            {
+              "type": "clamp",
+              "min": -100,
+              "max": 100
+            }
+          ],
+          "output": {
+            "type": "int"
+          }
+        },
+        {
+          "sources": [
+            "ParametricDarks",
+            "ParametricLights"
+          ],
+          "defaults": {
+            "ParametricDarks": 0,
+            "ParametricLights": 0
+          },
+          "suppress_default_warning": true,
           "target": {
             "section": "ToneEqualizer",
             "key": "Band2"
           },
           "optional": true,
           "transforms": [
+            {
+              "type": "weighted_sum",
+              "weights": {
+                "ParametricDarks": 0.65,
+                "ParametricLights": 0.35
+              }
+            },
+            {
+              "type": "linear",
+              "scale": 1.15
+            },
+            {
+              "type": "clamp",
+              "min": -100,
+              "max": 100
+            }
+          ],
+          "output": {
+            "type": "int"
+          }
+        },
+        {
+          "sources": [
+            "ParametricLights",
+            "ParametricHighlights"
+          ],
+          "defaults": {
+            "ParametricLights": 0,
+            "ParametricHighlights": 0
+          },
+          "suppress_default_warning": true,
+          "target": {
+            "section": "ToneEqualizer",
+            "key": "Band3"
+          },
+          "optional": true,
+          "transforms": [
+            {
+              "type": "weighted_sum",
+              "weights": {
+                "ParametricLights": 0.65,
+                "ParametricHighlights": 0.2
+              }
+            },
             {
               "type": "linear",
               "scale": 1.15
@@ -3362,10 +4213,14 @@
           "source": "ParametricHighlights",
           "target": {
             "section": "ToneEqualizer",
-            "key": "Band3"
+            "key": "Band4"
           },
           "optional": true,
           "transforms": [
+            {
+              "type": "linear",
+              "scale": 0.8
+            },
             {
               "type": "linear",
               "scale": 1.15
@@ -3891,6 +4746,38 @@
           }
         },
         {
+          "source": "ColorNoiseReductionSmoothness",
+          "target": {
+            "section": "Directional Pyramid Denoising",
+            "key": "Chroma"
+          },
+          "optional": true,
+          "transforms": [
+            {
+              "type": "skip_if_outside",
+              "min": 0,
+              "max": 100
+            },
+            {
+              "type": "skip_if_default",
+              "value": 50
+            },
+            {
+              "type": "linear",
+              "scale": 0.9,
+              "offset": 0.0
+            },
+            {
+              "type": "clamp",
+              "min": 0,
+              "max": 100
+            }
+          ],
+          "output": {
+            "type": "int"
+          }
+        },
+        {
           "source": "ColorNoiseReduction",
           "target": {
             "section": "Directional Pyramid Denoising",
@@ -3955,6 +4842,38 @@
           }
         },
         {
+          "source": "ColorNoiseReductionDetail",
+          "target": {
+            "section": "Directional Pyramid Denoising",
+            "key": "Ldetail"
+          },
+          "optional": true,
+          "transforms": [
+            {
+              "type": "skip_if_outside",
+              "min": 0,
+              "max": 100
+            },
+            {
+              "type": "skip_if_default",
+              "value": 50
+            },
+            {
+              "type": "linear",
+              "scale": 0.9,
+              "offset": 0.0
+            },
+            {
+              "type": "clamp",
+              "min": 0,
+              "max": 100
+            }
+          ],
+          "output": {
+            "type": "int"
+          }
+        },
+        {
           "source": "LuminanceSmoothing",
           "target": {
             "section": "Directional Pyramid Denoising",
@@ -3966,6 +4885,50 @@
               "type": "clamp",
               "min": 0,
               "max": 100
+            }
+          ],
+          "output": {
+            "type": "bool"
+          }
+        },
+        {
+          "source": "ColorNoiseReductionDetail",
+          "target": {
+            "section": "Directional Pyramid Denoising",
+            "key": "Enabled"
+          },
+          "optional": true,
+          "transforms": [
+            {
+              "type": "any_nondefault_in_range",
+              "min": 0,
+              "max": 100,
+              "value": 50
+            },
+            {
+              "type": "skip_if_false"
+            }
+          ],
+          "output": {
+            "type": "bool"
+          }
+        },
+        {
+          "source": "ColorNoiseReductionSmoothness",
+          "target": {
+            "section": "Directional Pyramid Denoising",
+            "key": "Enabled"
+          },
+          "optional": true,
+          "transforms": [
+            {
+              "type": "any_nondefault_in_range",
+              "min": 0,
+              "max": 100,
+              "value": 50
+            },
+            {
+              "type": "skip_if_false"
             }
           ],
           "output": {
@@ -4355,6 +5318,206 @@
           }
         },
         {
+          "source": "ColorGradeGlobalLum",
+          "target": {
+            "section": "Luminance Curve",
+            "key": "Brightness"
+          },
+          "optional": true,
+          "transforms": [
+            {
+              "type": "skip_if_outside",
+              "min": -100,
+              "max": 100
+            },
+            {
+              "type": "skip_if_default",
+              "value": 0
+            },
+            {
+              "type": "clamp",
+              "min": -100,
+              "max": 100
+            }
+          ],
+          "output": {
+            "type": "int"
+          }
+        },
+        {
+          "source": "ColorGradeMidtoneLum",
+          "target": {
+            "section": "Exposure",
+            "key": "Brightness"
+          },
+          "optional": true,
+          "transforms": [
+            {
+              "type": "skip_if_outside",
+              "min": -100,
+              "max": 100
+            },
+            {
+              "type": "skip_if_default",
+              "value": 0
+            },
+            {
+              "type": "clamp",
+              "min": -100,
+              "max": 100
+            }
+          ],
+          "output": {
+            "type": "int"
+          }
+        },
+        {
+          "source": "ColorGradeHighlightLum",
+          "target": {
+            "section": "Shadows & Highlights",
+            "key": "Highlights"
+          },
+          "optional": true,
+          "transforms": [
+            {
+              "type": "skip_if_outside",
+              "min": 0,
+              "max": 100
+            },
+            {
+              "type": "skip_if_default",
+              "value": 0
+            },
+            {
+              "type": "clamp",
+              "min": 0,
+              "max": 100
+            }
+          ],
+          "output": {
+            "type": "int"
+          }
+        },
+        {
+          "source": "ColorGradeShadowLum",
+          "target": {
+            "section": "Shadows & Highlights",
+            "key": "Shadows"
+          },
+          "optional": true,
+          "transforms": [
+            {
+              "type": "skip_if_outside",
+              "min": 0,
+              "max": 100
+            },
+            {
+              "type": "skip_if_default",
+              "value": 0
+            },
+            {
+              "type": "clamp",
+              "min": 0,
+              "max": 100
+            }
+          ],
+          "output": {
+            "type": "int"
+          }
+        },
+        {
+          "sources": [
+            "ColorGradeGlobalSat",
+            "ColorGradeGlobalHue"
+          ],
+          "target": {
+            "section": "ColorToning",
+            "key": "HighlightsColorSaturation"
+          },
+          "optional": true,
+          "transforms": [
+            {
+              "type": "lr_sat_hue_pair",
+              "sat_key": "ColorGradeGlobalSat",
+              "hue_key": "ColorGradeGlobalHue",
+              "reject_outside": true,
+              "skip_if_default_sat": true,
+              "default_sat": 0
+            }
+          ],
+          "output": {
+            "type": "raw"
+          }
+        },
+        {
+          "sources": [
+            "ColorGradeMidtoneSat",
+            "ColorGradeMidtoneHue"
+          ],
+          "target": {
+            "section": "ColorToning",
+            "key": "ShadowsColorSaturation"
+          },
+          "optional": true,
+          "transforms": [
+            {
+              "type": "lr_sat_hue_pair",
+              "sat_key": "ColorGradeMidtoneSat",
+              "hue_key": "ColorGradeMidtoneHue",
+              "reject_outside": true,
+              "skip_if_default_sat": true,
+              "default_sat": 0
+            }
+          ],
+          "output": {
+            "type": "raw"
+          }
+        },
+        {
+          "source": "ColorGradeGlobalSat",
+          "target": {
+            "section": "ColorToning",
+            "key": "Enabled"
+          },
+          "optional": true,
+          "transforms": [
+            {
+              "type": "any_nondefault_in_range",
+              "min": 0,
+              "max": 100,
+              "value": 0
+            },
+            {
+              "type": "skip_if_false"
+            }
+          ],
+          "output": {
+            "type": "bool"
+          }
+        },
+        {
+          "source": "ColorGradeMidtoneSat",
+          "target": {
+            "section": "ColorToning",
+            "key": "Enabled"
+          },
+          "optional": true,
+          "transforms": [
+            {
+              "type": "any_nondefault_in_range",
+              "min": 0,
+              "max": 100,
+              "value": 0
+            },
+            {
+              "type": "skip_if_false"
+            }
+          ],
+          "output": {
+            "type": "bool"
+          }
+        },
+        {
           "source": "PostCropVignetteAmount",
           "target": {
             "section": "PCVignette",
@@ -4363,16 +5526,13 @@
           "optional": true,
           "transforms": [
             {
-              "type": "abs"
-            },
-            {
               "type": "linear",
-              "scale": 0.013
+              "scale": 0.065
             },
             {
               "type": "clamp",
-              "min": 0,
-              "max": 1.5
+              "min": -6.0,
+              "max": 6.0
             }
           ],
           "output": {
@@ -4428,11 +5588,6 @@
             "key": "Enabled"
           },
           "optional": true,
-          "transforms": [
-            {
-              "type": "abs"
-            }
-          ],
           "output": {
             "type": "bool"
           }
@@ -4597,6 +5752,15 @@
           "optional": true,
           "transforms": [
             {
+              "type": "skip_if_outside",
+              "min": 0,
+              "max": 100
+            },
+            {
+              "type": "skip_if_default",
+              "value": 0
+            },
+            {
               "type": "linear",
               "scale": 2.0
             },
@@ -4622,7 +5786,28 @@
           "optional": true,
           "transforms": [
             {
-              "type": "any_positive"
+              "type": "any_nondefault_in_range",
+              "keys": [
+                "DefringePurpleAmount",
+                "DefringeGreenAmount"
+              ],
+              "defaults": {
+                "DefringePurpleAmount": 0,
+                "DefringeGreenAmount": 0
+              },
+              "ranges": {
+                "DefringePurpleAmount": {
+                  "min": 0,
+                  "max": 100
+                },
+                "DefringeGreenAmount": {
+                  "min": 0,
+                  "max": 100
+                }
+              }
+            },
+            {
+              "type": "skip_if_false"
             }
           ],
           "output": {
