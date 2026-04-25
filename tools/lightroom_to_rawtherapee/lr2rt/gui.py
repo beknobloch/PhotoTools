@@ -163,57 +163,282 @@ class ConverterWindow:
         self.status_var = StringVar(value="Drop a preset or click Browse, then preview or convert.")
 
         self.root.title("lr2rt Converter")
-        self.root.geometry("720x360")
-        self.root.minsize(680, 320)
+        self.root.geometry("860x520")
+        self.root.minsize(820, 480)
+        self._configure_style()
         self._build()
 
+    def _configure_style(self) -> None:
+        self.root.configure(background="#090a0c")
+        style = ttk.Style(self.root)
+        style.theme_use("clam")
+
+        style.configure("App.TFrame", background="#090a0c")
+        style.configure(
+            "Card.TFrame",
+            background="#171a20",
+            borderwidth=1,
+            relief="solid",
+            bordercolor="#3b3225",
+        )
+        style.configure("ActionRow.TFrame", background="#171a20", borderwidth=0, relief="flat")
+        style.configure("Title.TLabel", background="#171a20", foreground="#f5efe2", font=("Times", 19, "bold"))
+        style.configure("Subtitle.TLabel", background="#171a20", foreground="#b2ab9e", font=("Times", 11))
+        style.configure("Field.TLabel", background="#171a20", foreground="#d7cfbf", font=("TkDefaultFont", 10, "bold"))
+        style.configure("Hint.TLabel", background="#171a20", foreground="#9f9789", font=("TkDefaultFont", 9))
+        style.configure(
+            "Status.TLabel",
+            background="#111318",
+            foreground="#e6dfd2",
+            font=("TkDefaultFont", 10),
+            padding=(10, 8),
+        )
+
+        style.configure(
+            "Input.TEntry",
+            fieldbackground="#12151a",
+            foreground="#f3ecdd",
+            bordercolor="#3b3225",
+            insertcolor="#f3ecdd",
+            padding=(8, 6),
+        )
+        style.map(
+            "Input.TEntry",
+            fieldbackground=[("focus", "#181c23")],
+            bordercolor=[("focus", "#d3b173")],
+        )
+
+        style.configure(
+            "Input.TCombobox",
+            fieldbackground="#12151a",
+            foreground="#f3ecdd",
+            bordercolor="#3b3225",
+            arrowcolor="#d3b173",
+            padding=(8, 6),
+        )
+        style.map(
+            "Input.TCombobox",
+            fieldbackground=[("readonly", "#12151a"), ("focus", "#181c23")],
+            bordercolor=[("focus", "#d3b173")],
+        )
+
+        style.configure(
+            "Utility.TButton",
+            background="#21262f",
+            foreground="#ece3d2",
+            bordercolor="#4a4030",
+            lightcolor="#21262f",
+            darkcolor="#21262f",
+            focuscolor="#21262f",
+            padding=(12, 8),
+            relief="flat",
+        )
+        style.map(
+            "Utility.TButton",
+            background=[("active", "#2a313c"), ("pressed", "#1d232c")],
+            foreground=[("disabled", "#7d776d")],
+        )
+        style.configure(
+            "UtilityHover.TButton",
+            background="#2f3744",
+            foreground="#f6eddd",
+            bordercolor="#5a503d",
+            lightcolor="#2f3744",
+            darkcolor="#2f3744",
+            focuscolor="#2f3744",
+            padding=(12, 8),
+            relief="flat",
+        )
+        style.map(
+            "UtilityHover.TButton",
+            background=[("pressed", "#232a33")],
+            foreground=[("disabled", "#7d776d")],
+        )
+
+        style.configure(
+            "Secondary.TButton",
+            background="#3b2f1f",
+            foreground="#f4e5c9",
+            bordercolor="#5a462d",
+            lightcolor="#3b2f1f",
+            darkcolor="#3b2f1f",
+            focuscolor="#3b2f1f",
+            padding=(14, 8),
+            relief="flat",
+            font=("TkDefaultFont", 10, "bold"),
+        )
+        style.map(
+            "Secondary.TButton",
+            background=[("active", "#4a3a26"), ("pressed", "#332818")],
+            foreground=[("disabled", "#8d7f6b")],
+        )
+        style.configure(
+            "SecondaryHover.TButton",
+            background="#5a462d",
+            foreground="#fff3dc",
+            bordercolor="#7a613f",
+            lightcolor="#5a462d",
+            darkcolor="#5a462d",
+            focuscolor="#5a462d",
+            padding=(14, 8),
+            relief="flat",
+            font=("TkDefaultFont", 10, "bold"),
+        )
+        style.map(
+            "SecondaryHover.TButton",
+            background=[("pressed", "#473720")],
+            foreground=[("disabled", "#8d7f6b")],
+        )
+
+        style.configure(
+            "Primary.TButton",
+            background="#d3b173",
+            foreground="#090a0c",
+            bordercolor="#d3b173",
+            lightcolor="#d3b173",
+            darkcolor="#d3b173",
+            focuscolor="#d3b173",
+            padding=(16, 8),
+            relief="flat",
+            font=("TkDefaultFont", 10, "bold"),
+        )
+        style.map(
+            "Primary.TButton",
+            background=[("active", "#e0c089"), ("pressed", "#be9b5e")],
+            foreground=[("disabled", "#3c3b38")],
+        )
+        style.configure(
+            "PrimaryHover.TButton",
+            background="#e7cb95",
+            foreground="#090a0c",
+            bordercolor="#e7cb95",
+            lightcolor="#e7cb95",
+            darkcolor="#e7cb95",
+            focuscolor="#e7cb95",
+            padding=(16, 8),
+            relief="flat",
+            font=("TkDefaultFont", 10, "bold"),
+        )
+        style.map(
+            "PrimaryHover.TButton",
+            background=[("pressed", "#c8a86b")],
+            foreground=[("disabled", "#3c3b38")],
+        )
+
+    def _wire_hover_style(self, button: ttk.Button, normal_style: str, hover_style: str) -> None:
+        def on_enter(_event: object) -> None:
+            if "disabled" in button.state():
+                return
+            button.configure(style=hover_style)
+
+        def on_leave(_event: object) -> None:
+            button.configure(style=normal_style)
+
+        button.bind("<Enter>", on_enter, add="+")
+        button.bind("<Leave>", on_leave, add="+")
+
     def _build(self) -> None:
-        frame = ttk.Frame(self.root, padding=16)
-        frame.pack(fill=tk.BOTH, expand=True)
-        frame.columnconfigure(1, weight=1)
+        outer = ttk.Frame(self.root, style="App.TFrame", padding=22)
+        outer.pack(fill=tk.BOTH, expand=True)
+        outer.columnconfigure(0, weight=1)
+        outer.rowconfigure(1, weight=1)
 
-        title = ttk.Label(frame, text="Lightroom Preset to RawTherapee (.pp3)", font=("TkDefaultFont", 14, "bold"))
-        title.grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, 10))
+        header_card = ttk.Frame(outer, style="Card.TFrame", padding=(16, 14))
+        header_card.grid(row=0, column=0, sticky="ew", pady=(0, 12))
+        header_card.columnconfigure(0, weight=1)
+        ttk.Label(header_card, text="Lightroom Preset to RawTherapee", style="Title.TLabel").grid(
+            row=0, column=0, sticky="w"
+        )
+        subtitle_text = (
+            "Custom mapping loaded. Choose a profile, preview the look, then convert."
+            if self.mapping_file
+            else "Balanced profile selected. Preview first for a quick visual quality check."
+        )
+        ttk.Label(header_card, text=subtitle_text, style="Subtitle.TLabel").grid(row=1, column=0, sticky="w", pady=(4, 0))
 
-        subtitle_text = "Custom mapping file loaded." if self.mapping_file else "Balanced is the default profile."
-        subtitle = ttk.Label(frame, text=subtitle_text)
-        subtitle.grid(row=1, column=0, columnspan=3, sticky="w", pady=(0, 12))
+        form_card = ttk.Frame(outer, style="Card.TFrame", padding=(16, 14))
+        form_card.grid(row=1, column=0, sticky="nsew")
+        for idx, weight in enumerate((0, 1, 0)):
+            form_card.columnconfigure(idx, weight=weight)
+        form_card.rowconfigure(4, weight=1)
 
-        ttk.Label(frame, text="Profile").grid(row=2, column=0, sticky="w")
+        ttk.Label(form_card, text="Profile", style="Field.TLabel").grid(row=0, column=0, sticky="w")
         ttk.Combobox(
-            frame,
+            form_card,
             textvariable=self.profile_var,
             values=self.available_profiles,
             state="readonly",
-        ).grid(row=2, column=1, sticky="ew", padx=(8, 8))
+            style="Input.TCombobox",
+        ).grid(row=0, column=1, sticky="ew", padx=(10, 10))
+        ttk.Label(form_card, text="Translation profile", style="Hint.TLabel").grid(
+            row=0, column=2, sticky="e"
+        )
 
-        ttk.Label(frame, text="Preset (.xmp/.dng)").grid(row=3, column=0, sticky="w")
-        ttk.Entry(frame, textvariable=self.input_var).grid(row=3, column=1, sticky="ew", padx=(8, 8))
-        ttk.Button(frame, text="Browse…", command=self._browse_input).grid(row=3, column=2, sticky="ew")
+        ttk.Label(form_card, text="Preset (.xmp/.dng)", style="Field.TLabel").grid(row=1, column=0, sticky="w", pady=(10, 0))
+        ttk.Entry(form_card, textvariable=self.input_var, style="Input.TEntry").grid(
+            row=1, column=1, sticky="ew", padx=(10, 10), pady=(10, 0)
+        )
+        browse_input_btn = ttk.Button(form_card, text="Browse...", command=self._browse_input, style="Utility.TButton")
+        self._wire_hover_style(browse_input_btn, "Utility.TButton", "UtilityHover.TButton")
+        browse_input_btn.grid(row=1, column=2, sticky="ew", pady=(10, 0))
 
         self.drop_target = tk.Label(
-            frame,
+            form_card,
             text="Drag and drop a .xmp or .dng file here",
-            relief=tk.GROOVE,
+            relief=tk.SOLID,
             borderwidth=1,
-            padx=12,
-            pady=16,
+            padx=14,
+            pady=18,
             anchor="center",
+            bg="#101318",
+            fg="#d6cdbd",
+            highlightthickness=1,
+            highlightbackground="#3b3225",
+            font=("TkDefaultFont", 10),
         )
-        self.drop_target.grid(row=4, column=0, columnspan=3, sticky="ew", pady=(10, 12))
+        self.drop_target.grid(row=2, column=0, columnspan=3, sticky="ew", pady=(12, 12))
         if self.dnd_available:
             self.drop_target.configure(text="Drag and drop a .xmp or .dng file here")
         else:
             self.drop_target.configure(text="Drag-and-drop unavailable (install tkinterdnd2). Use Browse instead.")
 
-        ttk.Label(frame, text="Output folder").grid(row=5, column=0, sticky="w")
-        ttk.Entry(frame, textvariable=self.output_dir_var).grid(row=5, column=1, sticky="ew", padx=(8, 8))
-        ttk.Button(frame, text="Choose…", command=self._browse_output_dir).grid(row=5, column=2, sticky="ew")
+        ttk.Label(form_card, text="Output folder", style="Field.TLabel").grid(row=3, column=0, sticky="w")
+        ttk.Entry(form_card, textvariable=self.output_dir_var, style="Input.TEntry").grid(
+            row=3, column=1, sticky="ew", padx=(10, 10)
+        )
+        browse_output_btn = ttk.Button(
+            form_card, text="Choose...", command=self._browse_output_dir, style="Utility.TButton"
+        )
+        self._wire_hover_style(browse_output_btn, "Utility.TButton", "UtilityHover.TButton")
+        browse_output_btn.grid(row=3, column=2, sticky="ew")
 
-        ttk.Button(frame, text="Preview HTML", command=self._preview).grid(row=6, column=1, sticky="ew", padx=(8, 8), pady=(12, 0))
-        ttk.Button(frame, text="Convert", command=self._convert).grid(row=6, column=2, sticky="ew", pady=(12, 0))
-        ttk.Label(frame, textvariable=self.status_var, wraplength=640).grid(
-            row=7, column=0, columnspan=3, sticky="w", pady=(14, 0)
+        action_row = ttk.Frame(form_card, style="ActionRow.TFrame")
+        action_row.grid(row=4, column=0, columnspan=3, sticky="ew", pady=(14, 0))
+        action_row.columnconfigure(0, weight=1)
+        action_row.columnconfigure(1, weight=0)
+        action_row.columnconfigure(2, weight=0)
+        action_row.columnconfigure(3, weight=1)
+        preview_btn = ttk.Button(
+            action_row,
+            text="Preview HTML",
+            width=16,
+            command=self._preview,
+            style="Secondary.TButton",
+        )
+        self._wire_hover_style(preview_btn, "Secondary.TButton", "SecondaryHover.TButton")
+        preview_btn.grid(row=0, column=1, padx=(0, 10))
+        convert_btn = ttk.Button(
+            action_row,
+            text="Convert Preset",
+            width=16,
+            command=self._convert,
+            style="Primary.TButton",
+        )
+        self._wire_hover_style(convert_btn, "Primary.TButton", "PrimaryHover.TButton")
+        convert_btn.grid(row=0, column=2, padx=(10, 0))
+
+        ttk.Label(form_card, textvariable=self.status_var, wraplength=760, style="Status.TLabel").grid(
+            row=5, column=0, columnspan=3, sticky="ew", pady=(14, 0)
         )
 
     def bind_drop(self, dnd_files_symbol: object) -> None:

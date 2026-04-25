@@ -63,8 +63,10 @@ class PreviewReportingTests(unittest.TestCase):
             write_html_preview(result, html_path)
             html = html_path.read_text(encoding="utf-8")
 
-        self.assertIn("<small>13.200</small>", html)
-        self.assertIn("<small>14</small>", html)
+        self.assertIn("class=\"source-value\"", html)
+        self.assertIn(">13.200<", html)
+        self.assertIn(">14<", html)
+        self.assertIn("class=\"source-num\"", html)
         self.assertIn("class=\"range-track\"", html)
         self.assertIn("class=\"range-marker range-default\"", html)
         self.assertIn("class=\"range-marker range-value\"", html)
@@ -112,15 +114,15 @@ class PreviewReportingTests(unittest.TestCase):
             write_html_preview(result, html_path)
             html = html_path.read_text(encoding="utf-8")
 
-        self.assertNotIn("Vibrance/Enabled", html)
+        self.assertNotIn("class=\"target-key\">Enabled</strong>", html)
         self.assertIn("Hidden enable-toggle rows: 1", html)
-        self.assertIn("class=\"mapping-row group-start\"", html)
-        self.assertIn("class=\"mapping-row group-end\"", html)
+        self.assertIn("class=\"mapping-row group-start row-link\"", html)
+        self.assertIn("class=\"mapping-row group-end row-link\"", html)
 
         # Ensure section-grouped ordering in HTML: Vibrance entries are adjacent.
-        pastels_idx = html.find("Vibrance/Pastels")
-        saturated_idx = html.find("Vibrance/Saturated")
-        exposure_idx = html.find("Exposure/Contrast")
+        pastels_idx = html.find("class=\"target-tool\">Vibrance</span><strong class=\"target-key\">Pastels</strong>")
+        saturated_idx = html.find("class=\"target-tool\">Vibrance</span><strong class=\"target-key\">Saturated</strong>")
+        exposure_idx = html.find("class=\"target-tool\">Exposure</span><strong class=\"target-key\">Contrast</strong>")
         self.assertTrue(pastels_idx != -1 and saturated_idx != -1 and exposure_idx != -1)
         self.assertLess(pastels_idx, saturated_idx)
         self.assertLess(saturated_idx, exposure_idx)
@@ -154,8 +156,109 @@ class PreviewReportingTests(unittest.TestCase):
             html = html_path.read_text(encoding="utf-8")
 
         self.assertIn("Hidden default-value rows: 1", html)
-        self.assertNotIn("Perspective/Horizontal", html)
-        self.assertIn("Exposure/Contrast", html)
+        self.assertNotIn("class=\"target-tool\">Perspective</span><strong class=\"target-key\">Horizontal</strong>", html)
+        self.assertIn("class=\"target-tool\">Exposure</span><strong class=\"target-key\">Contrast</strong>", html)
+
+    def test_html_preview_unmapped_keys_only_shows_potentially_mappable_keys(self) -> None:
+        result = ConversionResult(
+            input_file=Path("/tmp/sample.xmp"),
+            input_format="xmp",
+            profile="balanced",
+            unmapped_source_keys=[
+                "ContactInfo",
+                "SupportsMonochrome",
+                "Version",
+                "ParametricShadows",
+            ],
+        )
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            html_path = Path(tmp_dir) / "preview.html"
+            write_html_preview(result, html_path)
+            html = html_path.read_text(encoding="utf-8")
+
+        self.assertIn("Unmapped Keys</div><div class=\"value\">1</div>", html)
+        self.assertIn("<li><code>ParametricShadows</code></li>", html)
+        self.assertNotIn("<li><code>ContactInfo</code></li>", html)
+        self.assertNotIn("<li><code>SupportsMonochrome</code></li>", html)
+        self.assertNotIn("<li><code>Version</code></li>", html)
+
+    def test_html_preview_renders_curve_output_with_visual(self) -> None:
+        result = ConversionResult(
+            input_file=Path("/tmp/sample.xmp"),
+            input_format="xmp",
+            profile="balanced",
+            mapped_values=[
+                MappedValue(
+                    source_key="ToneCurvePV2012",
+                    source_value=["0, 0", "64, 52", "180, 210", "255, 255"],
+                    section="Luminance Curve",
+                    key="LCurve",
+                    value="1;0.000000;0.000000;0.250000;0.203922;0.705882;0.823529;1.000000;1.000000;",
+                )
+            ],
+        )
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            html_path = Path(tmp_dir) / "preview.html"
+            write_html_preview(result, html_path)
+            html = html_path.read_text(encoding="utf-8")
+
+        self.assertIn("Curve (4 pts)", html)
+        self.assertIn("class=\"curve-mini\"", html)
+        self.assertIn("Raw values", html)
+
+    def test_html_preview_rows_link_to_rawpedia_tool_docs(self) -> None:
+        result = ConversionResult(
+            input_file=Path("/tmp/sample.xmp"),
+            input_format="xmp",
+            profile="balanced",
+            mapped_values=[
+                MappedValue(
+                    source_key="Highlights2012",
+                    source_value=-40,
+                    section="Shadows & Highlights",
+                    key="HLCompression",
+                    value="24",
+                )
+            ],
+        )
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            html_path = Path(tmp_dir) / "preview.html"
+            write_html_preview(result, html_path)
+            html = html_path.read_text(encoding="utf-8")
+
+        self.assertIn("data-doc-url=\"https://rawpedia.rawtherapee.com/Shadows/Highlights\"", html)
+        self.assertIn("tabindex=\"0\"", html)
+        self.assertIn("role=\"link\"", html)
+        self.assertIn("tr.row-link[data-doc-url]", html)
+        self.assertIn("window.open(url, \"_blank\", \"noopener,noreferrer\")", html)
+
+    def test_html_preview_truncates_long_source_key_but_keeps_full_title(self) -> None:
+        long_source_key = "HueAdjustmentRed+HueAdjustmentOrange+HueAdjustmentYellow+HueAdjustmentGreen+HueAdjustmentAqua+HueAdjustmentBlue+HueAdjustmentPurple+HueAdjustmentMagenta"
+        result = ConversionResult(
+            input_file=Path("/tmp/sample.xmp"),
+            input_format="xmp",
+            profile="balanced",
+            mapped_values=[
+                MappedValue(
+                    source_key=long_source_key,
+                    source_value=12,
+                    section="HSV Equalizer",
+                    key="HCurve",
+                    value="1;0.000000;0.500000;0.350000;0.350000;0.166667;0.511000;0.350000;0.350000;",
+                )
+            ],
+        )
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            html_path = Path(tmp_dir) / "preview.html"
+            write_html_preview(result, html_path)
+            html = html_path.read_text(encoding="utf-8")
+
+        self.assertIn(f'title="{long_source_key}"', html)
+        self.assertRegex(html, r'<code class="source-key" title="[^"]+">[^<]*\.\.\.[^<]*</code>')
 
 
 if __name__ == "__main__":
