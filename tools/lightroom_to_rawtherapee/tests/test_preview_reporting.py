@@ -116,8 +116,7 @@ class PreviewReportingTests(unittest.TestCase):
 
         self.assertNotIn("class=\"target-key\">Enabled</strong>", html)
         self.assertIn("Hidden enable-toggle rows: 1", html)
-        self.assertIn("class=\"mapping-row group-start row-link\"", html)
-        self.assertIn("class=\"mapping-row group-end row-link\"", html)
+        self.assertIn("class=\"mapping-row row-link\"", html)
 
         # Ensure section-grouped ordering in HTML: Vibrance entries are adjacent.
         pastels_idx = html.find("class=\"target-tool\">Vibrance</span><strong class=\"target-key\">Pastels</strong>")

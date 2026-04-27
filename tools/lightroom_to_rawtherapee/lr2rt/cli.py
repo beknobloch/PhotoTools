@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-from copy import deepcopy
 import json
 import sys
 from pathlib import Path
@@ -11,8 +10,9 @@ from lr2rt.config import load_config
 from lr2rt.mapper import MappingEngine
 from lr2rt.models import ConversionResult
 from lr2rt.parsers import parse_lightroom_file
+from lr2rt.pp3_template import apply_base_profile_mode
 from lr2rt.pp3_writer import serialize_pp3, write_pp3
-from lr2rt.pp3_template import merge_pp3_sections, parse_pp3_file
+from lr2rt.pp3_template import parse_pp3_file
 from lr2rt.quality import STRICT_FAILURE_EXIT_CODE, evaluate_strict_mode
 from lr2rt.reporting import render_terminal_preview, write_html_preview
 
@@ -121,31 +121,12 @@ def _apply_base_profile(result: ConversionResult, base_pp3: Path | None, base_pp
         return result
     template_path = base_pp3.expanduser().resolve()
     base_sections = parse_pp3_file(template_path)
-
-    if base_pp3_mode == "preserve":
-        mapped_overrides: dict[str, dict[str, str]] = {}
-        for mapped in result.mapped_values:
-            mapped_overrides.setdefault(mapped.section, {})[mapped.key] = mapped.value
-        result.pp3_sections = merge_pp3_sections(base_sections, mapped_overrides)
-        return result
-
-    merged = deepcopy(base_sections)
-
-    # In safe mode, use converter-generated section bodies for known sections.
-    # This avoids inheriting creative curves/operations from the template.
-    converter_sections = result.pp3_sections
-    for section, kv_pairs in converter_sections.items():
-        merged[section] = deepcopy(kv_pairs)
-
-    # Disable untouched template tools by default to prevent accidental look carry-over.
-    converter_section_names = set(converter_sections.keys())
-    for section, kv_pairs in list(merged.items()):
-        if section in converter_section_names:
-            continue
-        if "Enabled" in kv_pairs:
-            merged[section] = {"Enabled": "false"}
-
-    result.pp3_sections = merged
+    result.pp3_sections = apply_base_profile_mode(
+        base_sections=base_sections,
+        converter_sections=result.pp3_sections,
+        mapped_values=result.mapped_values,
+        base_pp3_mode=base_pp3_mode,
+    )
     return result
 
 

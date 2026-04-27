@@ -13,7 +13,7 @@ from lr2rt.gui import (
     is_supported_input,
     load_gui_preferences,
     parse_drop_paths,
-    run_gui_batch_conversion,
+    run_gui_conversion_checked,
     run_gui_preview,
     save_gui_preferences,
 )
@@ -141,18 +141,27 @@ class GuiHelperTests(unittest.TestCase):
             output_dir = tmp_path / "out"
             mapping_path = _write_warning_mapping(tmp_path / "override.json")
 
-            outcomes = run_gui_batch_conversion(
-                input_paths=[input_a, input_b],
+            outcome_a = run_gui_conversion_checked(
+                input_path=input_a,
+                output_dir=output_dir,
+                profile="strict_test",
+                mapping_file=str(mapping_path),
+                strict=True,
+            )
+            outcome_b = run_gui_conversion_checked(
+                input_path=input_b,
                 output_dir=output_dir,
                 profile="strict_test",
                 mapping_file=str(mapping_path),
                 strict=True,
             )
 
-        self.assertEqual(len(outcomes), 2)
-        self.assertTrue(all(outcome.status == "failed_strict" for outcome in outcomes))
-        self.assertTrue(all(outcome.warning_count > 0 for outcome in outcomes))
-        self.assertTrue(all(outcome.output_path is None for outcome in outcomes))
+        self.assertTrue(outcome_a[2].failed)
+        self.assertTrue(outcome_b[2].failed)
+        self.assertGreater(len(outcome_a[1].warnings), 0)
+        self.assertGreater(len(outcome_b[1].warnings), 0)
+        self.assertIsNone(outcome_a[0])
+        self.assertIsNone(outcome_b[0])
         self.assertFalse((output_dir / "a.pp3").exists())
         self.assertFalse((output_dir / "b.pp3").exists())
 
@@ -165,8 +174,8 @@ class GuiHelperTests(unittest.TestCase):
             output_dir = tmp_path / "out"
             mapping_path = _write_warning_mapping(tmp_path / "override.json")
 
-            outcomes = run_gui_batch_conversion(
-                input_paths=[input_file],
+            output_path, result, strict_eval = run_gui_conversion_checked(
+                input_path=input_file,
                 output_dir=output_dir,
                 profile="strict_test",
                 mapping_file=str(mapping_path),
@@ -174,8 +183,9 @@ class GuiHelperTests(unittest.TestCase):
             )
             output_exists = (output_dir / "a.pp3").exists()
 
-        self.assertEqual(len(outcomes), 1)
-        self.assertEqual(outcomes[0].status, "converted_with_warnings")
+        self.assertFalse(strict_eval.failed)
+        self.assertGreater(len(result.warnings), 0)
+        self.assertIsNotNone(output_path)
         self.assertTrue(output_exists)
 
 

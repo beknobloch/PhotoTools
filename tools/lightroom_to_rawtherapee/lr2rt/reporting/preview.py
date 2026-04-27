@@ -161,7 +161,6 @@ def _severity_badge_class(severity: str) -> str:
 
 def _mapping_row_html(
     mapped: MappedValue,
-    group_class: str,
     group_color: str,
     severity: str,
     is_default_output: bool,
@@ -176,7 +175,7 @@ def _mapping_row_html(
     source_key_display = _truncate_middle(source_key_full)
     source_value_html = _highlight_numeric_fragments(source_value)
     doc_url = _rawpedia_doc_url(mapped.section, mapped.key)
-    row_classes = f"mapping-row {group_class} row-link"
+    row_classes = "mapping-row row-link"
     row_attrs = (
         f" data-doc-url=\"{escape(doc_url)}\" tabindex=\"0\" role=\"link\""
         f" data-is-default=\"{'true' if is_default_output else 'false'}\""
@@ -372,22 +371,6 @@ def _render_output_html(value: str) -> str:
     )
 
 
-def _group_display_mappings(mapped_values: list[MappedValue]) -> list[MappedValue]:
-    grouped: dict[str, list[MappedValue]] = {}
-    section_order: list[str] = []
-
-    for mapped in mapped_values:
-        if mapped.section not in grouped:
-            grouped[mapped.section] = []
-            section_order.append(mapped.section)
-        grouped[mapped.section].append(mapped)
-
-    ordered: list[MappedValue] = []
-    for section in section_order:
-        ordered.extend(grouped[section])
-    return ordered
-
-
 def _filter_potentially_mappable_unmapped_keys(keys: list[str]) -> list[str]:
     filtered: list[str] = []
     for key in keys:
@@ -445,7 +428,10 @@ def write_html_preview(result: ConversionResult, output_path: Path) -> None:
     display_mappings = [mapped for mapped in result.mapped_values if mapped.key != "Enabled"]
     hidden_enabled_rows = len(result.mapped_values) - len(display_mappings)
     default_row_count = sum(1 for mapped in display_mappings if _is_default_mapped_value(mapped))
-    grouped_mappings = _group_display_mappings(display_mappings)
+    grouped_sections: dict[str, list[MappedValue]] = {}
+    for mapped in display_mappings:
+        grouped_sections.setdefault(mapped.section, []).append(mapped)
+    ordered_mappings = [mapped for section_rows in grouped_sections.values() for mapped in section_rows]
     mapping_rows_parts: list[str] = []
 
     warning_codes_by_source: dict[str, set[str]] = {}
@@ -455,26 +441,13 @@ def write_html_preview(result: ConversionResult, output_path: Path) -> None:
 
     severity_counts = {"critical": 0, "warning": 0, "ok": 0}
 
-    for idx, mapped in enumerate(grouped_mappings):
-        prev_section = grouped_mappings[idx - 1].section if idx > 0 else None
-        next_section = grouped_mappings[idx + 1].section if idx + 1 < len(grouped_mappings) else None
-
-        if prev_section != mapped.section and next_section != mapped.section:
-            group_class = "group-single"
-        elif prev_section != mapped.section:
-            group_class = "group-start"
-        elif next_section != mapped.section:
-            group_class = "group-end"
-        else:
-            group_class = "group-mid"
-
+    for mapped in ordered_mappings:
         severity = _severity_for_mapping(mapped, warning_codes_by_source)
         is_default_output = _is_default_mapped_value(mapped)
         severity_counts[severity] += 1
         mapping_rows_parts.append(
             _mapping_row_html(
                 mapped=mapped,
-                group_class=group_class,
                 group_color=_section_color(mapped.section),
                 severity=severity,
                 is_default_output=is_default_output,
@@ -706,16 +679,6 @@ def write_html_preview(result: ConversionResult, output_path: Path) -> None:
       .mapping-row td:first-child {{
         border-left: 4px solid var(--group-color);
       }}
-      .mapping-row.group-start td {{
-        padding-top: 16px;
-      }}
-      .mapping-row.group-end td {{
-        padding-bottom: 16px;
-      }}
-      .mapping-row.group-single td {{
-        padding-top: 14px;
-        padding-bottom: 14px;
-      }}
       .mapping-row.row-link {{
         cursor: pointer;
       }}
@@ -861,7 +824,7 @@ def write_html_preview(result: ConversionResult, output_path: Path) -> None:
       <p><strong>Input:</strong> {escape(str(result.input_file))}<br /><strong>Profile:</strong> {escape(result.profile)}</p>
 
       <section class=\"summary\">
-        <div class=\"card\"><div class=\"label\">Mapped</div><div class=\"value\">{len(grouped_mappings)}</div></div>
+        <div class=\"card\"><div class=\"label\">Mapped</div><div class=\"value\">{len(ordered_mappings)}</div></div>
         <div class=\"card\"><div class=\"label\">Warnings</div><div class=\"value\">{len(result.warnings)}</div></div>
         <div class=\"card\"><div class=\"label\">Unmapped Keys</div><div class=\"value\">{len(display_unmapped_keys)}</div></div>
       </section>

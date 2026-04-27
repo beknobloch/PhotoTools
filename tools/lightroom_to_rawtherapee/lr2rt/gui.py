@@ -4,7 +4,6 @@ import json
 import re
 import webbrowser
 from dataclasses import dataclass
-from copy import deepcopy
 from pathlib import Path
 from tkinter import BooleanVar, StringVar, filedialog, messagebox, ttk
 import tkinter as tk
@@ -13,7 +12,7 @@ from lr2rt.config import load_config
 from lr2rt.mapper import MappingEngine
 from lr2rt.models import ConversionResult
 from lr2rt.parsers import parse_lightroom_file
-from lr2rt.pp3_template import merge_pp3_sections, parse_pp3_file
+from lr2rt.pp3_template import apply_base_profile_mode, parse_pp3_file
 from lr2rt.pp3_writer import write_pp3
 from lr2rt.quality import StrictEvaluation, evaluate_strict_mode
 from lr2rt.reporting import write_html_preview
@@ -117,15 +116,6 @@ class QueueEntry:
     message: str = ""
 
 
-@dataclass(slots=True, frozen=True)
-class BatchConversionOutcome:
-    input_path: Path
-    status: str
-    warning_count: int
-    output_path: Path | None
-    message: str
-
-
 class ConversionQueueModel:
     def __init__(self) -> None:
         self._entries: list[QueueEntry] = []
@@ -142,7 +132,6 @@ class ConversionQueueModel:
         return self._entries[index]
 
     def add_paths(self, paths: list[Path]) -> QueueAddSummary:
-        summary = QueueAddSummary()
         added = skipped_missing = skipped_unsupported = skipped_duplicate = 0
 
         existing = {entry.input_path for entry in self._entries}
@@ -210,27 +199,12 @@ def _apply_base_profile(result: ConversionResult, base_pp3: Path | None, base_pp
         return result
     template_path = base_pp3.expanduser().resolve()
     base_sections = parse_pp3_file(template_path)
-
-    if base_pp3_mode == "preserve":
-        mapped_overrides: dict[str, dict[str, str]] = {}
-        for mapped in result.mapped_values:
-            mapped_overrides.setdefault(mapped.section, {})[mapped.key] = mapped.value
-        result.pp3_sections = merge_pp3_sections(base_sections, mapped_overrides)
-        return result
-
-    merged = deepcopy(base_sections)
-    converter_sections = result.pp3_sections
-    for section, kv_pairs in converter_sections.items():
-        merged[section] = deepcopy(kv_pairs)
-
-    converter_section_names = set(converter_sections.keys())
-    for section, kv_pairs in list(merged.items()):
-        if section in converter_section_names:
-            continue
-        if "Enabled" in kv_pairs:
-            merged[section] = {"Enabled": "false"}
-
-    result.pp3_sections = merged
+    result.pp3_sections = apply_base_profile_mode(
+        base_sections=base_sections,
+        converter_sections=result.pp3_sections,
+        mapped_values=result.mapped_values,
+        base_pp3_mode=base_pp3_mode,
+    )
     return result
 
 
@@ -285,88 +259,6 @@ def run_gui_conversion_checked(
     return output_path, result, strict_eval
 
 
-def run_gui_conversion(
-    input_path: Path,
-    output_dir: Path,
-    profile: str = "balanced",
-    mapping_file: str | None = None,
-    base_pp3: Path | None = None,
-    base_pp3_mode: str = "safe",
-) -> tuple[Path, ConversionResult]:
-    output_path, result, _ = run_gui_conversion_checked(
-        input_path=input_path,
-        output_dir=output_dir,
-        profile=profile,
-        mapping_file=mapping_file,
-        base_pp3=base_pp3,
-        base_pp3_mode=base_pp3_mode,
-        strict=False,
-    )
-    if output_path is None:  # pragma: no cover - guarded by strict=False
-        raise RuntimeError("Unexpected strict failure while strict mode is disabled.")
-    return output_path, result
-
-
-def run_gui_batch_conversion(
-    input_paths: list[Path],
-    output_dir: Path,
-    profile: str = "balanced",
-    mapping_file: str | None = None,
-    base_pp3: Path | None = None,
-    base_pp3_mode: str = "safe",
-    strict: bool = False,
-) -> list[BatchConversionOutcome]:
-    outcomes: list[BatchConversionOutcome] = []
-
-    for input_path in input_paths:
-        resolved_input = input_path.expanduser().resolve()
-        try:
-            output_path, result, strict_eval = run_gui_conversion_checked(
-                input_path=resolved_input,
-                output_dir=output_dir,
-                profile=profile,
-                mapping_file=mapping_file,
-                base_pp3=base_pp3,
-                base_pp3_mode=base_pp3_mode,
-                strict=strict,
-            )
-            if strict_eval.failed:
-                outcomes.append(
-                    BatchConversionOutcome(
-                        input_path=resolved_input,
-                        status="failed_strict",
-                        warning_count=len(result.warnings),
-                        output_path=None,
-                        message=strict_eval.message or "Strict mode failed.",
-                    )
-                )
-                continue
-
-            status = "converted_with_warnings" if result.warnings else "converted"
-            outcomes.append(
-                BatchConversionOutcome(
-                    input_path=resolved_input,
-                    status=status,
-                    warning_count=len(result.warnings),
-                    output_path=output_path,
-                    message="",
-                )
-            )
-
-        except Exception as exc:
-            outcomes.append(
-                BatchConversionOutcome(
-                    input_path=resolved_input,
-                    status="error",
-                    warning_count=0,
-                    output_path=None,
-                    message=str(exc),
-                )
-            )
-
-    return outcomes
-
-
 def run_gui_preview(
     input_path: Path,
     profile: str = "balanced",
@@ -417,7 +309,7 @@ class ConverterWindow:
         self.status_var = StringVar(value="Add presets to the queue, then preview or convert all.")
         self.queue = ConversionQueueModel()
 
-        self.root.title("lr2rt Converter")
+        self.root.title("Lightroom Preset to RawTherapee Profile Converter")
         self.root.geometry("980x620")
         self.root.minsize(900, 520)
         self._configure_style()
@@ -426,6 +318,12 @@ class ConverterWindow:
 
     def _configure_style(self) -> None:
         self.root.configure(background="#090a0c")
+        # Ensure Combobox dropdown listbox keeps the same high-contrast palette.
+        self.root.option_add("*TCombobox*Listbox.background", "#12151a")
+        self.root.option_add("*TCombobox*Listbox.foreground", "#f3ecdd")
+        self.root.option_add("*TCombobox*Listbox.selectBackground", "#d3b173")
+        self.root.option_add("*TCombobox*Listbox.selectForeground", "#090a0c")
+        self.root.option_add("*TButton*cursor", "hand2")
         style = ttk.Style(self.root)
         style.theme_use("clam")
 
@@ -439,11 +337,36 @@ class ConverterWindow:
         style.configure("Status.TLabel", background="#111318", foreground="#e6dfd2", font=("TkDefaultFont", 10), padding=(10, 8))
         style.configure("Input.TEntry", fieldbackground="#12151a", foreground="#f3ecdd", bordercolor="#3b3225", insertcolor="#f3ecdd", padding=(8, 6))
         style.configure("Input.TCombobox", fieldbackground="#12151a", foreground="#f3ecdd", bordercolor="#3b3225", arrowcolor="#d3b173", padding=(8, 6))
-        style.configure("Strict.TCheckbutton", background="#171a20", foreground="#f3ecdd")
+        style.map(
+            "Input.TCombobox",
+            fieldbackground=[("readonly", "#12151a"), ("focus", "#181c23"), ("active", "#181c23")],
+            foreground=[("readonly", "#f3ecdd"), ("focus", "#f3ecdd"), ("active", "#f3ecdd")],
+            selectbackground=[("readonly", "#d3b173"), ("focus", "#d3b173")],
+            selectforeground=[("readonly", "#090a0c"), ("focus", "#090a0c")],
+            bordercolor=[("focus", "#d3b173"), ("active", "#d3b173")],
+            arrowcolor=[("active", "#e2c28b"), ("focus", "#e2c28b")],
+        )
 
         style.configure("Utility.TButton", background="#21262f", foreground="#ece3d2", bordercolor="#4a4030", lightcolor="#21262f", darkcolor="#21262f", focuscolor="#21262f", padding=(10, 7), relief="flat")
         style.configure("Secondary.TButton", background="#3b2f1f", foreground="#f4e5c9", bordercolor="#5a462d", lightcolor="#3b2f1f", darkcolor="#3b2f1f", focuscolor="#3b2f1f", padding=(12, 8), relief="flat", font=("TkDefaultFont", 10, "bold"))
         style.configure("Primary.TButton", background="#d3b173", foreground="#090a0c", bordercolor="#d3b173", lightcolor="#d3b173", darkcolor="#d3b173", focuscolor="#d3b173", padding=(12, 8), relief="flat", font=("TkDefaultFont", 10, "bold"))
+        style.map(
+            "Utility.TButton",
+            background=[("active", "#2a313c"), ("pressed", "#1d232c")],
+            foreground=[("active", "#f7efde"), ("pressed", "#f7efde"), ("focus", "#f7efde")],
+            bordercolor=[("active", "#5a503d"), ("focus", "#5a503d")],
+        )
+        style.map(
+            "Secondary.TButton",
+            background=[("active", "#4a3a26"), ("pressed", "#332818")],
+            foreground=[("active", "#fff3dc"), ("pressed", "#fff3dc"), ("focus", "#fff3dc")],
+            bordercolor=[("active", "#7a613f"), ("focus", "#7a613f")],
+        )
+        style.map(
+            "Primary.TButton",
+            background=[("active", "#e0c089"), ("pressed", "#be9b5e")],
+            foreground=[("active", "#090a0c"), ("pressed", "#090a0c"), ("focus", "#090a0c")],
+        )
 
     def _build(self) -> None:
         outer = ttk.Frame(self.root, style="App.TFrame", padding=22)
@@ -455,13 +378,11 @@ class ConverterWindow:
         header_card.grid(row=0, column=0, sticky="ew", pady=(0, 12))
         header_card.columnconfigure(0, weight=1)
 
-        ttk.Label(header_card, text="Lightroom Preset to RawTherapee", style="Title.TLabel").grid(row=0, column=0, sticky="w")
-        subtitle_text = (
-            "Queue presets, preview selected, and convert in one batch."
-            if not self.mapping_file
-            else "Queue presets with custom mapping loaded, then convert with quality controls."
-        )
-        ttk.Label(header_card, text=subtitle_text, style="Subtitle.TLabel").grid(row=1, column=0, sticky="w", pady=(4, 0))
+        ttk.Label(
+            header_card,
+            text="Lightroom Preset to RawTherapee Profile Converter",
+            style="Title.TLabel",
+        ).grid(row=0, column=0, sticky="w")
 
         form_card = ttk.Frame(outer, style="Card.TFrame", padding=(16, 14))
         form_card.grid(row=1, column=0, sticky="nsew")
@@ -478,22 +399,30 @@ class ConverterWindow:
         ).grid(row=0, column=1, sticky="ew", padx=(10, 10))
         ttk.Label(form_card, text="Translation profile", style="Hint.TLabel").grid(row=0, column=2, sticky="e")
 
-        ttk.Checkbutton(
+        tk.Checkbutton(
             form_card,
             text="Strict mode (fail conversion on warnings)",
             variable=self.strict_var,
-            style="Strict.TCheckbutton",
+            bg="#171a20",
+            fg="#f3ecdd",
+            activebackground="#171a20",
+            activeforeground="#f3ecdd",
+            selectcolor="#d3b173",
+            highlightthickness=0,
+            bd=0,
+            relief=tk.FLAT,
+            cursor="hand2",
         ).grid(row=1, column=0, columnspan=2, sticky="w", pady=(10, 0))
 
         input_actions = ttk.Frame(form_card, style="ActionRow.TFrame")
         input_actions.grid(row=1, column=2, sticky="e", pady=(10, 0))
-        ttk.Button(input_actions, text="Add Files...", command=self._browse_input_files, style="Utility.TButton").grid(
+        ttk.Button(input_actions, text="Add Files...", command=self._browse_input_files, style="Utility.TButton", cursor="hand2").grid(
             row=0, column=0, padx=(0, 8)
         )
-        ttk.Button(input_actions, text="Remove Selected", command=self._remove_selected, style="Utility.TButton").grid(
+        ttk.Button(input_actions, text="Remove Selected", command=self._remove_selected, style="Utility.TButton", cursor="hand2").grid(
             row=0, column=1, padx=(0, 8)
         )
-        ttk.Button(input_actions, text="Clear Queue", command=self._clear_queue, style="Utility.TButton").grid(row=0, column=2)
+        ttk.Button(input_actions, text="Clear Queue", command=self._clear_queue, style="Utility.TButton", cursor="hand2").grid(row=0, column=2)
 
         self.drop_target = tk.Label(
             form_card,
@@ -519,10 +448,10 @@ class ConverterWindow:
         )
         output_actions = ttk.Frame(form_card, style="ActionRow.TFrame")
         output_actions.grid(row=3, column=2, sticky="e")
-        ttk.Button(output_actions, text="Choose...", command=self._browse_output_dir, style="Utility.TButton").grid(
+        ttk.Button(output_actions, text="Choose...", command=self._browse_output_dir, style="Utility.TButton", cursor="hand2").grid(
             row=0, column=0, padx=(0, 8)
         )
-        ttk.Button(output_actions, text="Open Folder", command=self._open_output_folder, style="Utility.TButton").grid(
+        ttk.Button(output_actions, text="Open Folder", command=self._open_output_folder, style="Utility.TButton", cursor="hand2").grid(
             row=0, column=1
         )
 
@@ -530,6 +459,7 @@ class ConverterWindow:
         base_frame = ttk.Frame(form_card, style="ActionRow.TFrame")
         base_frame.grid(row=4, column=1, sticky="ew", padx=(10, 10), pady=(10, 0))
         base_frame.columnconfigure(0, weight=1)
+        self.base_frame = base_frame
         ttk.Entry(base_frame, textvariable=self.base_pp3_var, style="Input.TEntry").grid(row=0, column=0, sticky="ew")
         ttk.Combobox(
             base_frame,
@@ -539,12 +469,23 @@ class ConverterWindow:
             width=11,
             style="Input.TCombobox",
         ).grid(row=0, column=1, padx=(8, 0), sticky="e")
+        self.base_hint_label = ttk.Label(
+            base_frame,
+            text=(
+                "Template RawTherapee profile used as a starting point before mapped values are merged."
+            ),
+            style="Hint.TLabel",
+            wraplength=320,
+            justify="left",
+        )
+        self.base_hint_label.grid(row=1, column=0, columnspan=2, sticky="w", pady=(4, 0))
+        self.base_frame.bind("<Configure>", self._on_base_frame_configure, add="+")
         base_actions = ttk.Frame(form_card, style="ActionRow.TFrame")
         base_actions.grid(row=4, column=2, sticky="e", pady=(10, 0))
-        ttk.Button(base_actions, text="Choose...", command=self._browse_base_pp3, style="Utility.TButton").grid(
+        ttk.Button(base_actions, text="Choose...", command=self._browse_base_pp3, style="Utility.TButton", cursor="hand2").grid(
             row=0, column=0, padx=(0, 8)
         )
-        ttk.Button(base_actions, text="Clear", command=self._clear_base_pp3, style="Utility.TButton").grid(
+        ttk.Button(base_actions, text="Clear", command=self._clear_base_pp3, style="Utility.TButton", cursor="hand2").grid(
             row=0, column=1
         )
 
@@ -580,10 +521,10 @@ class ConverterWindow:
         action_row.columnconfigure(2, weight=0)
         action_row.columnconfigure(3, weight=1)
 
-        ttk.Button(action_row, text="Preview Selected", command=self._preview_selected, style="Secondary.TButton").grid(
+        ttk.Button(action_row, text="Preview Selected", command=self._preview_selected, style="Secondary.TButton", cursor="hand2").grid(
             row=0, column=1, padx=(0, 10)
         )
-        ttk.Button(action_row, text="Convert All", command=self._convert_all, style="Primary.TButton").grid(
+        ttk.Button(action_row, text="Convert All", command=self._convert_all, style="Primary.TButton", cursor="hand2").grid(
             row=0, column=2, padx=(10, 0)
         )
 
@@ -592,6 +533,7 @@ class ConverterWindow:
         )
 
         self._bind_preference_events()
+        self.root.after_idle(self._update_base_hint_wraplength)
 
     def bind_drop(self, dnd_files_symbol: object) -> None:
         self.drop_target.drop_target_register(dnd_files_symbol)
@@ -603,6 +545,18 @@ class ConverterWindow:
         self.output_dir_var.trace_add("write", lambda *_: self._persist_preferences())
         self.base_pp3_var.trace_add("write", lambda *_: self._persist_preferences())
         self.base_pp3_mode_var.trace_add("write", lambda *_: self._persist_preferences())
+
+    def _on_base_frame_configure(self, _event: object) -> None:
+        self._update_base_hint_wraplength()
+
+    def _update_base_hint_wraplength(self) -> None:
+        try:
+            width = self.base_frame.winfo_width()
+        except tk.TclError:
+            return
+        if width <= 1:
+            return
+        self.base_hint_label.configure(wraplength=max(180, width - 12))
 
     def _current_base_pp3(self) -> Path | None:
         base_value = self.base_pp3_var.get().strip()
@@ -786,8 +740,7 @@ class ConverterWindow:
         profile = self.profile_var.get().strip() or "balanced"
         strict = bool(self.strict_var.get())
 
-        converted = failed = errors = skipped = 0
-
+        converted = failed = errors = 0
         for entry in self.queue.entries():
             try:
                 output_path, result, strict_eval = run_gui_conversion_checked(
@@ -800,29 +753,29 @@ class ConverterWindow:
                     strict=strict,
                 )
                 entry.warning_count = len(result.warnings)
+                entry.output_path = output_path
 
                 if strict_eval.failed:
-                    entry.status = STATUS_FAILED_STRICT
-                    entry.output_path = None
                     entry.message = strict_eval.message or "Strict mode failed."
+                    entry.output_path = None
+                    entry.status = STATUS_FAILED_STRICT
                     failed += 1
-                else:
-                    entry.status = STATUS_CONVERTED_WARN if result.warnings else STATUS_CONVERTED
-                    entry.output_path = output_path
-                    entry.message = ""
-                    converted += 1
+                    continue
 
+                entry.message = ""
+                entry.status = STATUS_CONVERTED_WARN if result.warnings else STATUS_CONVERTED
+                converted += 1
             except Exception as exc:
-                entry.status = STATUS_ERROR
                 entry.warning_count = 0
                 entry.output_path = None
                 entry.message = str(exc)
+                entry.status = STATUS_ERROR
                 errors += 1
 
         self._refresh_queue_table()
         self.status_var.set(
             "Batch complete. "
-            f"Converted: {converted} | Failed: {failed} | Errors: {errors} | Skipped: {skipped}"
+            f"Converted: {converted} | Failed: {failed} | Errors: {errors} | Skipped: 0"
         )
         self._persist_preferences()
 
