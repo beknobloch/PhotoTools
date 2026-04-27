@@ -7,12 +7,15 @@ import unittest
 
 from lr2rt.gui import (
     ConversionQueueModel,
+    GuiPreferences,
     build_output_path,
     build_preview_path,
     is_supported_input,
+    load_gui_preferences,
     parse_drop_paths,
     run_gui_batch_conversion,
     run_gui_preview,
+    save_gui_preferences,
 )
 
 FIXTURE_XMP = Path(__file__).parent / "fixtures" / "sample_preset.xmp"
@@ -54,6 +57,37 @@ class GuiHelperTests(unittest.TestCase):
 
     def test_build_preview_path_uses_stable_filename(self) -> None:
         self.assertEqual(build_preview_path().name, "gui_preview.html")
+
+    def test_gui_preferences_round_trip(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            prefs_path = Path(tmp_dir) / "prefs.json"
+            preferences = GuiPreferences(
+                input_dir="/tmp/in",
+                output_dir="/tmp/out",
+                profile="aggressive",
+                base_pp3="/tmp/base.pp3",
+                base_pp3_mode="preserve",
+                strict=True,
+            )
+            save_gui_preferences(preferences, path=prefs_path)
+            loaded = load_gui_preferences(path=prefs_path)
+
+        self.assertEqual(loaded.input_dir, preferences.input_dir)
+        self.assertEqual(loaded.output_dir, preferences.output_dir)
+        self.assertEqual(loaded.profile, preferences.profile)
+        self.assertEqual(loaded.base_pp3, preferences.base_pp3)
+        self.assertEqual(loaded.base_pp3_mode, preferences.base_pp3_mode)
+        self.assertEqual(loaded.strict, preferences.strict)
+
+    def test_gui_preferences_invalid_file_falls_back_to_defaults(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            prefs_path = Path(tmp_dir) / "prefs.json"
+            prefs_path.write_text("{not-json", encoding="utf-8")
+            loaded = load_gui_preferences(path=prefs_path)
+
+        self.assertEqual(loaded.base_pp3_mode, "safe")
+        self.assertEqual(loaded.profile, "balanced")
+        self.assertFalse(loaded.strict)
 
     def test_run_gui_preview_writes_html(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:

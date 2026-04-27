@@ -127,7 +127,7 @@ class PreviewReportingTests(unittest.TestCase):
         self.assertLess(pastels_idx, saturated_idx)
         self.assertLess(saturated_idx, exposure_idx)
 
-    def test_html_preview_hides_rows_that_match_defaults(self) -> None:
+    def test_html_preview_marks_default_rows_for_toggle_filtering(self) -> None:
         result = ConversionResult(
             input_file=Path("/tmp/sample.xmp"),
             input_format="xmp",
@@ -155,9 +155,49 @@ class PreviewReportingTests(unittest.TestCase):
             write_html_preview(result, html_path)
             html = html_path.read_text(encoding="utf-8")
 
-        self.assertIn("Hidden default-value rows: 1", html)
-        self.assertNotIn("class=\"target-tool\">Perspective</span><strong class=\"target-key\">Horizontal</strong>", html)
+        self.assertIn("Default-value rows available for filtering: 1", html)
+        self.assertIn("id=\"toggle-nondefault\"", html)
+        self.assertIn("data-is-default=\"true\"", html)
+        self.assertIn("class=\"target-tool\">Perspective</span><strong class=\"target-key\">Horizontal</strong>", html)
         self.assertIn("class=\"target-tool\">Exposure</span><strong class=\"target-key\">Contrast</strong>", html)
+
+    def test_html_preview_includes_warning_toggle_and_grouped_severity_badges(self) -> None:
+        result = ConversionResult(
+            input_file=Path("/tmp/sample.xmp"),
+            input_format="xmp",
+            profile="balanced",
+            mapped_values=[
+                MappedValue(
+                    source_key="Temperature",
+                    source_value=5600,
+                    section="White Balance",
+                    key="Temperature",
+                    value="5600",
+                ),
+                MappedValue(
+                    source_key="Contrast2012",
+                    source_value=0,
+                    section="Exposure",
+                    key="Contrast",
+                    value="0",
+                    used_default=True,
+                ),
+            ],
+        )
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            html_path = Path(tmp_dir) / "preview.html"
+            write_html_preview(result, html_path)
+            html = html_path.read_text(encoding="utf-8")
+
+        self.assertIn("id=\"toggle-warnings\"", html)
+        self.assertIn("class=\"severity-strip\"", html)
+        self.assertIn(">critical ", html)
+        self.assertIn(">warning ", html)
+        self.assertIn(">ok ", html)
+        self.assertIn("data-severity=\"warning\"", html)
+        self.assertIn("data-has-warning=\"true\"", html)
+        self.assertIn("Visible rows:", html)
 
     def test_html_preview_unmapped_keys_only_shows_potentially_mappable_keys(self) -> None:
         result = ConversionResult(

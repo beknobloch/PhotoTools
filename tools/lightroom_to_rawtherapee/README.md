@@ -41,6 +41,8 @@ Direct translation between Lightroom and RawTherapee settings is approximate. Th
   - preview selected queue item
   - convert all queued files with per-row status and warning counts
   - optional strict mode toggle in the GUI
+  - optional base `.pp3` picker + merge mode selector
+  - persistent GUI preferences (last input/output folders, profile, base `.pp3`, base mode, strict toggle)
 
 ## Install / run
 
@@ -121,6 +123,7 @@ lr2rt-gui
 ```
 
 In GUI mode, `Preview HTML` overwrites a single file at `~/.lr2rt/gui_preview.html` and opens it in your default browser.
+GUI preferences are stored at `~/.lr2rt/gui_prefs.json`.
 
 Convert using a known-good base profile (recommended for compatibility):
 

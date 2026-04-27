@@ -49,6 +49,7 @@ _NON_MAPPABLE_LIGHTROOM_KEYS = {
     "Version",
 }
 _RAWPEDIA_BASE_URL = "https://rawpedia.rawtherapee.com/"
+_CRITICAL_WARNING_CODES = {"MISSING_SOURCE", "TRANSFORM_ERROR"}
 _RAWPEDIA_TOOL_PATHS = {
     "Exposure": "Exposure",
     "White Balance": "White_Balance",
@@ -141,9 +142,33 @@ def _rawpedia_doc_url(section: str, key: str) -> str:
     return f"{_RAWPEDIA_BASE_URL}index.php?search={query}"
 
 
-def _mapping_row_html(mapped: MappedValue, group_class: str, group_color: str) -> str:
+def _severity_for_mapping(mapped: MappedValue, warning_codes_by_source: dict[str, set[str]]) -> str:
+    warning_codes = warning_codes_by_source.get(mapped.source_key, set())
+    if any(code in _CRITICAL_WARNING_CODES for code in warning_codes):
+        return "critical"
+    if warning_codes or mapped.used_default:
+        return "warning"
+    return "ok"
+
+
+def _severity_badge_class(severity: str) -> str:
+    if severity == "critical":
+        return "critical"
+    if severity == "warning":
+        return "warn"
+    return "ok"
+
+
+def _mapping_row_html(
+    mapped: MappedValue,
+    group_class: str,
+    group_color: str,
+    severity: str,
+    is_default_output: bool,
+) -> str:
     source_origin = "default" if mapped.used_default else "source"
     chip_class = "warn" if mapped.used_default else "ok"
+    severity_badge = _severity_badge_class(severity)
     source_value = _format_source_value(mapped)
     range_html = _range_visual_html(mapped)
     output_html = _render_output_html(mapped.value)
@@ -154,6 +179,9 @@ def _mapping_row_html(mapped: MappedValue, group_class: str, group_color: str) -
     row_classes = f"mapping-row {group_class} row-link"
     row_attrs = (
         f" data-doc-url=\"{escape(doc_url)}\" tabindex=\"0\" role=\"link\""
+        f" data-is-default=\"{'true' if is_default_output else 'false'}\""
+        f" data-severity=\"{escape(severity)}\""
+        f" data-has-warning=\"{'true' if severity != 'ok' else 'false'}\""
         f" aria-label=\"Open RawPedia docs for {escape(mapped.section)} / {escape(mapped.key)}\""
     )
     return (
@@ -161,7 +189,7 @@ def _mapping_row_html(mapped: MappedValue, group_class: str, group_color: str) -
         f"<td class=\"col-source\"><code class=\"source-key\" title=\"{escape(source_key_full)}\">{escape(source_key_display)}</code><small class=\"source-value\">{source_value_html}</small></td>"
         f"<td class=\"col-target\"><div class=\"target-entry\"><span class=\"target-tool\">{escape(mapped.section)}</span><strong class=\"target-key\">{escape(mapped.key)}</strong></div></td>"
         f"<td class=\"col-output\">{output_html}{range_html}</td>"
-        f"<td class=\"col-origin\"><span class=\"chip {chip_class}\">{source_origin}</span></td>"
+        f"<td class=\"col-origin\"><span class=\"chip {chip_class}\">{source_origin}</span><span class=\"chip severity {severity_badge}\">{escape(severity)}</span></td>"
         "</tr>"
     )
 
@@ -414,13 +442,18 @@ def render_terminal_preview(result: ConversionResult, max_rows: int = 50) -> str
 
 
 def write_html_preview(result: ConversionResult, output_path: Path) -> None:
-    visible_mappings = [mapped for mapped in result.mapped_values if mapped.key != "Enabled"]
-    hidden_enabled_rows = len(result.mapped_values) - len(visible_mappings)
-    before_default_filter = len(visible_mappings)
-    visible_mappings = [mapped for mapped in visible_mappings if not _is_default_mapped_value(mapped)]
-    hidden_default_rows = before_default_filter - len(visible_mappings)
-    grouped_mappings = _group_display_mappings(visible_mappings)
+    display_mappings = [mapped for mapped in result.mapped_values if mapped.key != "Enabled"]
+    hidden_enabled_rows = len(result.mapped_values) - len(display_mappings)
+    default_row_count = sum(1 for mapped in display_mappings if _is_default_mapped_value(mapped))
+    grouped_mappings = _group_display_mappings(display_mappings)
     mapping_rows_parts: list[str] = []
+
+    warning_codes_by_source: dict[str, set[str]] = {}
+    for warning in result.warnings:
+        if warning.source_key:
+            warning_codes_by_source.setdefault(warning.source_key, set()).add(warning.code)
+
+    severity_counts = {"critical": 0, "warning": 0, "ok": 0}
 
     for idx, mapped in enumerate(grouped_mappings):
         prev_section = grouped_mappings[idx - 1].section if idx > 0 else None
@@ -435,11 +468,16 @@ def write_html_preview(result: ConversionResult, output_path: Path) -> None:
         else:
             group_class = "group-mid"
 
+        severity = _severity_for_mapping(mapped, warning_codes_by_source)
+        is_default_output = _is_default_mapped_value(mapped)
+        severity_counts[severity] += 1
         mapping_rows_parts.append(
             _mapping_row_html(
                 mapped=mapped,
                 group_class=group_class,
                 group_color=_section_color(mapped.section),
+                severity=severity,
+                is_default_output=is_default_output,
             )
         )
 
@@ -447,9 +485,7 @@ def write_html_preview(result: ConversionResult, output_path: Path) -> None:
     hidden_enabled_note = (
         f"<p class=\"note\">Hidden enable-toggle rows: {hidden_enabled_rows}</p>" if hidden_enabled_rows else ""
     )
-    hidden_defaults_note = (
-        f"<p class=\"note\">Hidden default-value rows: {hidden_default_rows}</p>" if hidden_default_rows else ""
-    )
+    default_rows_note = f"<p class=\"note\">Default-value rows available for filtering: {default_row_count}</p>"
 
     display_unmapped_keys = _filter_potentially_mappable_unmapped_keys(result.unmapped_source_keys)
 
@@ -551,6 +587,32 @@ def write_html_preview(result: ConversionResult, output_path: Path) -> None:
         margin: -10px 0 14px;
         color: var(--muted);
         font-size: 0.84rem;
+      }}
+      .filters {{
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin: 0 0 12px;
+      }}
+      .toggle {{
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        font-size: 0.84rem;
+        color: #ede4d2;
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        padding: 7px 11px;
+      }}
+      .toggle input {{
+        accent-color: var(--accent);
+      }}
+      .severity-strip {{
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin: 0 0 12px;
       }}
       table {{
         width: 100%;
@@ -670,6 +732,9 @@ def write_html_preview(result: ConversionResult, output_path: Path) -> None:
         outline: 2px solid rgba(211, 177, 115, 0.72);
         outline-offset: -2px;
       }}
+      .mapping-row.is-hidden {{
+        display: none;
+      }}
       .chip {{
         display: inline-block;
         border-radius: 999px;
@@ -688,6 +753,14 @@ def write_html_preview(result: ConversionResult, output_path: Path) -> None:
         background: rgba(216, 160, 107, 0.12);
         color: var(--warn);
         border-color: rgba(216, 160, 107, 0.35);
+      }}
+      .chip.severity {{
+        margin-top: 6px;
+      }}
+      .chip.critical {{
+        background: rgba(210, 92, 92, 0.12);
+        color: #f0a6a6;
+        border-color: rgba(210, 92, 92, 0.4);
       }}
       .range-meta {{
         margin-top: 6px;
@@ -792,8 +865,18 @@ def write_html_preview(result: ConversionResult, output_path: Path) -> None:
         <div class=\"card\"><div class=\"label\">Warnings</div><div class=\"value\">{len(result.warnings)}</div></div>
         <div class=\"card\"><div class=\"label\">Unmapped Keys</div><div class=\"value\">{len(display_unmapped_keys)}</div></div>
       </section>
+      <div class=\"severity-strip\">
+        <span class=\"chip severity critical\">critical {severity_counts['critical']}</span>
+        <span class=\"chip severity warn\">warning {severity_counts['warning']}</span>
+        <span class=\"chip severity ok\">ok {severity_counts['ok']}</span>
+      </div>
+      <section class=\"filters\">
+        <label class=\"toggle\"><input id=\"toggle-nondefault\" type=\"checkbox\" checked /> Show only non-default outputs</label>
+        <label class=\"toggle\"><input id=\"toggle-warnings\" type=\"checkbox\" /> Show only warnings</label>
+      </section>
       {hidden_enabled_note}
-      {hidden_defaults_note}
+      {default_rows_note}
+      <p id=\"visible-row-note\" class=\"note\"></p>
 
       <table>
         <colgroup>
@@ -824,6 +907,32 @@ def write_html_preview(result: ConversionResult, output_path: Path) -> None:
     <script>
       (() => {{
         const rows = document.querySelectorAll("tr.row-link[data-doc-url]");
+        const toggleNonDefault = document.getElementById("toggle-nondefault");
+        const toggleWarnings = document.getElementById("toggle-warnings");
+        const visibleRowNote = document.getElementById("visible-row-note");
+
+        const applyFilters = () => {{
+          let visible = 0;
+          rows.forEach((row) => {{
+            const isDefault = row.getAttribute("data-is-default") === "true";
+            const hasWarning = row.getAttribute("data-has-warning") === "true";
+            let show = true;
+            if (toggleNonDefault && toggleNonDefault.checked && isDefault) {{
+              show = false;
+            }}
+            if (toggleWarnings && toggleWarnings.checked && !hasWarning) {{
+              show = false;
+            }}
+            row.classList.toggle("is-hidden", !show);
+            if (show) {{
+              visible += 1;
+            }}
+          }});
+          if (visibleRowNote) {{
+            visibleRowNote.textContent = `Visible rows: ${{visible}} / ${{rows.length}}`;
+          }}
+        }};
+
         const shouldIgnoreClick = (event) => Boolean(event.target.closest("details, summary, a, button, input, textarea, select"));
         const openDocs = (row) => {{
           const url = row.getAttribute("data-doc-url");
@@ -843,6 +952,14 @@ def write_html_preview(result: ConversionResult, output_path: Path) -> None:
             openDocs(row);
           }});
         }});
+
+        if (toggleNonDefault) {{
+          toggleNonDefault.addEventListener("change", applyFilters);
+        }}
+        if (toggleWarnings) {{
+          toggleWarnings.addEventListener("change", applyFilters);
+        }}
+        applyFilters();
       }})();
     </script>
   </body>

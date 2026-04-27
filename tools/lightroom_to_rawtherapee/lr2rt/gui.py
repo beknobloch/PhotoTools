@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 import webbrowser
 from dataclasses import dataclass
@@ -20,6 +21,8 @@ from lr2rt.reporting import write_html_preview
 SUPPORTED_EXTENSIONS = {".xmp", ".dng"}
 _DROP_TOKEN_RE = re.compile(r"\{[^}]*\}|[^\s]+")
 _DEFAULT_PREVIEW_PATH = Path.home() / ".lr2rt" / "gui_preview.html"
+_DEFAULT_GUI_PREFS_PATH = Path.home() / ".lr2rt" / "gui_prefs.json"
+_BASE_PP3_MODES = ("safe", "preserve")
 
 STATUS_QUEUED = "Queued"
 STATUS_PREVIEWED = "Previewed"
@@ -27,6 +30,74 @@ STATUS_CONVERTED = "Converted"
 STATUS_CONVERTED_WARN = "Converted (Warnings)"
 STATUS_FAILED_STRICT = "Failed (Strict)"
 STATUS_ERROR = "Error"
+
+
+@dataclass(slots=True, frozen=True)
+class GuiPreferences:
+    input_dir: str
+    output_dir: str
+    profile: str
+    base_pp3: str
+    base_pp3_mode: str
+    strict: bool
+
+
+def _default_gui_preferences() -> GuiPreferences:
+    home = str(Path.home())
+    return GuiPreferences(
+        input_dir=home,
+        output_dir=str(Path.home() / "Downloads"),
+        profile="balanced",
+        base_pp3="",
+        base_pp3_mode="safe",
+        strict=False,
+    )
+
+
+def load_gui_preferences(path: Path | None = None) -> GuiPreferences:
+    prefs_path = (path or _DEFAULT_GUI_PREFS_PATH).expanduser().resolve()
+    defaults = _default_gui_preferences()
+    if not prefs_path.exists():
+        return defaults
+
+    try:
+        raw = json.loads(prefs_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return defaults
+    if not isinstance(raw, dict):
+        return defaults
+
+    input_dir = str(raw.get("input_dir", defaults.input_dir)).strip() or defaults.input_dir
+    output_dir = str(raw.get("output_dir", defaults.output_dir)).strip() or defaults.output_dir
+    profile = str(raw.get("profile", defaults.profile)).strip() or defaults.profile
+    base_pp3 = str(raw.get("base_pp3", defaults.base_pp3)).strip()
+    base_pp3_mode = str(raw.get("base_pp3_mode", defaults.base_pp3_mode)).strip()
+    if base_pp3_mode not in _BASE_PP3_MODES:
+        base_pp3_mode = defaults.base_pp3_mode
+    strict = bool(raw.get("strict", defaults.strict))
+
+    return GuiPreferences(
+        input_dir=input_dir,
+        output_dir=output_dir,
+        profile=profile,
+        base_pp3=base_pp3,
+        base_pp3_mode=base_pp3_mode,
+        strict=strict,
+    )
+
+
+def save_gui_preferences(preferences: GuiPreferences, path: Path | None = None) -> None:
+    prefs_path = (path or _DEFAULT_GUI_PREFS_PATH).expanduser().resolve()
+    prefs_path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "input_dir": preferences.input_dir,
+        "output_dir": preferences.output_dir,
+        "profile": preferences.profile,
+        "base_pp3": preferences.base_pp3,
+        "base_pp3_mode": preferences.base_pp3_mode,
+        "strict": preferences.strict,
+    }
+    prefs_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
 
 @dataclass(slots=True, frozen=True)
@@ -328,6 +399,9 @@ class ConverterWindow:
         base_pp3: Path | None,
         base_pp3_mode: str,
         strict: bool,
+        input_dir: str,
+        output_dir: str,
+        preferences_path: Path | None = None,
     ) -> None:
         self.root = root
         self.dnd_available = dnd_available
@@ -335,9 +409,11 @@ class ConverterWindow:
         self.profile_var = StringVar(value=profile)
         self.strict_var = BooleanVar(value=strict)
         self.mapping_file = mapping_file
-        self.base_pp3 = base_pp3
-        self.base_pp3_mode = base_pp3_mode
-        self.output_dir_var = StringVar(value=str(Path.home() / "Downloads"))
+        self.base_pp3_var = StringVar(value=str(base_pp3) if base_pp3 else "")
+        self.base_pp3_mode_var = StringVar(value=base_pp3_mode if base_pp3_mode in _BASE_PP3_MODES else "safe")
+        self.input_dir_var = StringVar(value=input_dir)
+        self.output_dir_var = StringVar(value=output_dir)
+        self.preferences_path = preferences_path
         self.status_var = StringVar(value="Add presets to the queue, then preview or convert all.")
         self.queue = ConversionQueueModel()
 
@@ -346,6 +422,7 @@ class ConverterWindow:
         self.root.minsize(900, 520)
         self._configure_style()
         self._build()
+        self.root.protocol("WM_DELETE_WINDOW", self._on_close)
 
     def _configure_style(self) -> None:
         self.root.configure(background="#090a0c")
@@ -389,7 +466,7 @@ class ConverterWindow:
         form_card = ttk.Frame(outer, style="Card.TFrame", padding=(16, 14))
         form_card.grid(row=1, column=0, sticky="nsew")
         form_card.columnconfigure(1, weight=1)
-        form_card.rowconfigure(4, weight=1)
+        form_card.rowconfigure(5, weight=1)
 
         ttk.Label(form_card, text="Profile", style="Field.TLabel").grid(row=0, column=0, sticky="w")
         ttk.Combobox(
@@ -449,8 +526,30 @@ class ConverterWindow:
             row=0, column=1
         )
 
+        ttk.Label(form_card, text="Base .pp3 (optional)", style="Field.TLabel").grid(row=4, column=0, sticky="w", pady=(10, 0))
+        base_frame = ttk.Frame(form_card, style="ActionRow.TFrame")
+        base_frame.grid(row=4, column=1, sticky="ew", padx=(10, 10), pady=(10, 0))
+        base_frame.columnconfigure(0, weight=1)
+        ttk.Entry(base_frame, textvariable=self.base_pp3_var, style="Input.TEntry").grid(row=0, column=0, sticky="ew")
+        ttk.Combobox(
+            base_frame,
+            textvariable=self.base_pp3_mode_var,
+            values=list(_BASE_PP3_MODES),
+            state="readonly",
+            width=11,
+            style="Input.TCombobox",
+        ).grid(row=0, column=1, padx=(8, 0), sticky="e")
+        base_actions = ttk.Frame(form_card, style="ActionRow.TFrame")
+        base_actions.grid(row=4, column=2, sticky="e", pady=(10, 0))
+        ttk.Button(base_actions, text="Choose...", command=self._browse_base_pp3, style="Utility.TButton").grid(
+            row=0, column=0, padx=(0, 8)
+        )
+        ttk.Button(base_actions, text="Clear", command=self._clear_base_pp3, style="Utility.TButton").grid(
+            row=0, column=1
+        )
+
         table_frame = ttk.Frame(form_card, style="ActionRow.TFrame")
-        table_frame.grid(row=4, column=0, columnspan=3, sticky="nsew", pady=(14, 0))
+        table_frame.grid(row=5, column=0, columnspan=3, sticky="nsew", pady=(14, 0))
         table_frame.columnconfigure(0, weight=1)
         table_frame.rowconfigure(0, weight=1)
 
@@ -475,7 +574,7 @@ class ConverterWindow:
         self.queue_table.configure(yscrollcommand=y_scroll.set)
 
         action_row = ttk.Frame(form_card, style="ActionRow.TFrame")
-        action_row.grid(row=5, column=0, columnspan=3, sticky="ew", pady=(12, 0))
+        action_row.grid(row=6, column=0, columnspan=3, sticky="ew", pady=(12, 0))
         action_row.columnconfigure(0, weight=1)
         action_row.columnconfigure(1, weight=0)
         action_row.columnconfigure(2, weight=0)
@@ -489,12 +588,55 @@ class ConverterWindow:
         )
 
         ttk.Label(form_card, textvariable=self.status_var, wraplength=880, style="Status.TLabel").grid(
-            row=6, column=0, columnspan=3, sticky="ew", pady=(14, 0)
+            row=7, column=0, columnspan=3, sticky="ew", pady=(14, 0)
         )
+
+        self._bind_preference_events()
 
     def bind_drop(self, dnd_files_symbol: object) -> None:
         self.drop_target.drop_target_register(dnd_files_symbol)
         self.drop_target.dnd_bind("<<Drop>>", self._on_drop)
+
+    def _bind_preference_events(self) -> None:
+        self.profile_var.trace_add("write", lambda *_: self._persist_preferences())
+        self.strict_var.trace_add("write", lambda *_: self._persist_preferences())
+        self.output_dir_var.trace_add("write", lambda *_: self._persist_preferences())
+        self.base_pp3_var.trace_add("write", lambda *_: self._persist_preferences())
+        self.base_pp3_mode_var.trace_add("write", lambda *_: self._persist_preferences())
+
+    def _current_base_pp3(self) -> Path | None:
+        base_value = self.base_pp3_var.get().strip()
+        if not base_value:
+            return None
+        return Path(base_value).expanduser().resolve()
+
+    def _collect_preferences(self) -> GuiPreferences:
+        input_dir = self.input_dir_var.get().strip() or str(Path.home())
+        output_dir = self.output_dir_var.get().strip() or str(Path.home() / "Downloads")
+        profile = self.profile_var.get().strip() or "balanced"
+        base_pp3 = self.base_pp3_var.get().strip()
+        base_mode = self.base_pp3_mode_var.get().strip()
+        if base_mode not in _BASE_PP3_MODES:
+            base_mode = "safe"
+        strict = bool(self.strict_var.get())
+        return GuiPreferences(
+            input_dir=input_dir,
+            output_dir=output_dir,
+            profile=profile,
+            base_pp3=base_pp3,
+            base_pp3_mode=base_mode,
+            strict=strict,
+        )
+
+    def _persist_preferences(self) -> None:
+        try:
+            save_gui_preferences(self._collect_preferences(), path=self.preferences_path)
+        except OSError:
+            pass
+
+    def _on_close(self) -> None:
+        self._persist_preferences()
+        self.root.destroy()
 
     def _selected_indices(self) -> list[int]:
         indices: list[int] = []
@@ -519,6 +661,9 @@ class ConverterWindow:
             )
 
     def _add_paths(self, paths: list[Path]) -> None:
+        resolved_paths = [path.expanduser().resolve() for path in paths]
+        if resolved_paths:
+            self.input_dir_var.set(str(resolved_paths[0].parent))
         summary = self.queue.add_paths(paths)
         self._refresh_queue_table()
 
@@ -531,10 +676,13 @@ class ConverterWindow:
             fragments.append(f"unsupported {summary.skipped_unsupported}")
 
         self.status_var.set("Queue update: " + " | ".join(fragments))
+        self._persist_preferences()
 
     def _browse_input_files(self) -> None:
+        initial_dir = self.input_dir_var.get().strip() or str(Path.home())
         selected = filedialog.askopenfilenames(
             title="Select Lightroom presets",
+            initialdir=initial_dir,
             filetypes=[("Lightroom Presets", "*.xmp *.dng"), ("All files", "*.*")],
         )
         if selected:
@@ -545,6 +693,22 @@ class ConverterWindow:
         selected = filedialog.askdirectory(title="Select output folder", initialdir=initial_dir)
         if selected:
             self.output_dir_var.set(str(Path(selected).expanduser().resolve()))
+
+    def _browse_base_pp3(self) -> None:
+        initial_dir = str(Path.home())
+        current = self.base_pp3_var.get().strip()
+        if current:
+            initial_dir = str(Path(current).expanduser().resolve().parent)
+        selected = filedialog.askopenfilename(
+            title="Select base RawTherapee profile",
+            initialdir=initial_dir,
+            filetypes=[("RawTherapee Profile", "*.pp3"), ("All files", "*.*")],
+        )
+        if selected:
+            self.base_pp3_var.set(str(Path(selected).expanduser().resolve()))
+
+    def _clear_base_pp3(self) -> None:
+        self.base_pp3_var.set("")
 
     def _open_output_folder(self) -> None:
         output_dir = Path(self.output_dir_var.get().strip()).expanduser().resolve()
@@ -593,8 +757,8 @@ class ConverterWindow:
                 input_path=entry.input_path,
                 profile=self.profile_var.get().strip() or "balanced",
                 mapping_file=self.mapping_file,
-                base_pp3=self.base_pp3,
-                base_pp3_mode=self.base_pp3_mode,
+                base_pp3=self._current_base_pp3(),
+                base_pp3_mode=self.base_pp3_mode_var.get().strip() or "safe",
             )
             webbrowser.open_new(preview_path.as_uri())
         except Exception as exc:
@@ -606,6 +770,7 @@ class ConverterWindow:
         entry.message = f"Preview opened at {preview_path}"
         self._refresh_queue_table()
         self.status_var.set(f"Preview opened: {preview_path} | warnings: {len(result.warnings)}")
+        self._persist_preferences()
 
     def _convert_all(self) -> None:
         if len(self.queue) == 0:
@@ -630,8 +795,8 @@ class ConverterWindow:
                     output_dir=output_dir,
                     profile=profile,
                     mapping_file=self.mapping_file,
-                    base_pp3=self.base_pp3,
-                    base_pp3_mode=self.base_pp3_mode,
+                    base_pp3=self._current_base_pp3(),
+                    base_pp3_mode=self.base_pp3_mode_var.get().strip() or "safe",
                     strict=strict,
                 )
                 entry.warning_count = len(result.warnings)
@@ -659,24 +824,40 @@ class ConverterWindow:
             "Batch complete. "
             f"Converted: {converted} | Failed: {failed} | Errors: {errors} | Skipped: {skipped}"
         )
+        self._persist_preferences()
 
 
 def launch_gui(
-    profile: str = "balanced",
+    profile: str | None = None,
     mapping_file: str | None = None,
     base_pp3: Path | None = None,
-    base_pp3_mode: str = "safe",
-    strict: bool = False,
+    base_pp3_mode: str | None = None,
+    strict: bool | None = None,
+    preferences_path: Path | None = None,
 ) -> None:
+    preferences = load_gui_preferences(path=preferences_path)
     override_path = Path(mapping_file).expanduser().resolve() if mapping_file else None
     config = load_config(override_path)
     available_profiles = list(config.get("profiles", {}).keys())
     if not available_profiles:
         raise ValueError("No mapping profiles found in configuration.")
 
+    preferred_profile = profile or preferences.profile
     selected_profile = "balanced" if "balanced" in available_profiles else available_profiles[0]
-    if profile in available_profiles:
-        selected_profile = profile
+    if preferred_profile in available_profiles:
+        selected_profile = preferred_profile
+
+    selected_base_pp3_mode = (base_pp3_mode or preferences.base_pp3_mode).strip()
+    if selected_base_pp3_mode not in _BASE_PP3_MODES:
+        selected_base_pp3_mode = "safe"
+
+    selected_base_pp3 = base_pp3
+    if selected_base_pp3 is None and preferences.base_pp3:
+        selected_base_pp3 = Path(preferences.base_pp3).expanduser().resolve()
+
+    selected_output_dir = preferences.output_dir
+    selected_input_dir = preferences.input_dir
+    selected_strict = preferences.strict if strict is None else strict
 
     dnd_available = False
     dnd_files_symbol: object | None = None
@@ -696,9 +877,12 @@ def launch_gui(
         available_profiles=available_profiles,
         profile=selected_profile,
         mapping_file=mapping_file,
-        base_pp3=base_pp3,
-        base_pp3_mode=base_pp3_mode,
-        strict=strict,
+        base_pp3=selected_base_pp3,
+        base_pp3_mode=selected_base_pp3_mode,
+        strict=selected_strict,
+        input_dir=selected_input_dir,
+        output_dir=selected_output_dir,
+        preferences_path=preferences_path,
     )
     if dnd_available and dnd_files_symbol is not None:
         app.bind_drop(dnd_files_symbol)

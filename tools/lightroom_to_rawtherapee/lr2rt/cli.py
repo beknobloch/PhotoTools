@@ -84,8 +84,12 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Fail conversion if any warnings are produced and skip writing output.",
     )
 
-    gui_parser = subparsers.add_parser("gui", help="Open a simple desktop UI for drag-and-drop conversion")
-    gui_parser.add_argument("--profile", default="balanced", help="Mapping profile name (default: balanced)")
+    gui_parser = subparsers.add_parser("gui", help="Open the desktop UI for queued conversion")
+    gui_parser.add_argument(
+        "--profile",
+        default=None,
+        help="Mapping profile name override. Defaults to last GUI selection.",
+    )
     gui_parser.add_argument("--mapping-file", help="Optional JSON file to override or extend default mappings.")
     gui_parser.add_argument(
         "--base-pp3",
@@ -95,16 +99,17 @@ def _build_parser() -> argparse.ArgumentParser:
     gui_parser.add_argument(
         "--base-pp3-mode",
         choices=("safe", "preserve"),
-        default="safe",
+        default=None,
         help=(
             "How to merge --base-pp3. "
-            "'safe' keeps compatibility structure while preventing template look leakage (default). "
+            "'safe' keeps compatibility structure while preventing template look leakage. "
             "'preserve' keeps all base values and only overrides mapped keys."
         ),
     )
     gui_parser.add_argument(
         "--strict",
         action="store_true",
+        default=None,
         help="Open GUI with strict mode enabled by default.",
     )
 
@@ -275,7 +280,7 @@ def main(argv: list[str] | None = None) -> int:
                 mapping_file=args.mapping_file,
                 base_pp3=args.base_pp3,
                 base_pp3_mode=args.base_pp3_mode,
-                strict=bool(args.strict),
+                strict=args.strict,
             )
             return 0
 
