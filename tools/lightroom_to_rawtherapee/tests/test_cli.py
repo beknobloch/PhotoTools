@@ -1,14 +1,39 @@
+from __future__ import annotations
+
+from contextlib import redirect_stderr, redirect_stdout
+import io
+import json
 from pathlib import Path
 import tempfile
 import unittest
 
-from lr2rt.cli import _apply_base_profile
+from lr2rt.cli import _apply_base_profile, main as cli_main
 from lr2rt.config import load_default_config
 from lr2rt.mapper import MappingEngine
 from lr2rt.parsers.xmp import parse_xmp_file
+from lr2rt.quality import STRICT_FAILURE_EXIT_CODE
 
 CAMERA_RAW_NS = "http://ns.adobe.com/camera-raw-settings/1.0/"
 FIXTURE_XMP = Path(__file__).parent / "fixtures" / "sample_preset.xmp"
+
+
+def _write_warning_mapping(path: Path) -> Path:
+    override = {
+        "profiles": {
+            "strict_test": {
+                "description": "Produces a missing-source warning for strict mode tests.",
+                "mappings": [
+                    {
+                        "source": "MissingSettingForStrictTest",
+                        "target": {"section": "Exposure", "key": "Contrast"},
+                        "output": {"type": "int"},
+                    }
+                ],
+            }
+        }
+    }
+    path.write_text(json.dumps(override), encoding="utf-8")
+    return path
 
 
 class CliMergeTests(unittest.TestCase):
@@ -50,6 +75,127 @@ class CliMergeTests(unittest.TestCase):
         self.assertEqual(merged.pp3_sections["Vibrance"]["Pastels"], "10")
         self.assertEqual(merged.pp3_sections["Vibrance"]["Saturated"], "10")
         self.assertEqual(merged.pp3_sections["Exposure"]["Curve"], "4;0;0;1;1;")
+
+
+class CliStrictModeTests(unittest.TestCase):
+    def test_convert_without_strict_writes_output_even_with_warnings(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            output_path = tmp_path / "out.pp3"
+            mapping_path = _write_warning_mapping(tmp_path / "override.json")
+
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+            with redirect_stdout(stdout), redirect_stderr(stderr):
+                code = cli_main(
+                    [
+                        "convert",
+                        str(FIXTURE_XMP),
+                        str(output_path),
+                        "--profile",
+                        "strict_test",
+                        "--mapping-file",
+                        str(mapping_path),
+                    ]
+                )
+            output_exists = output_path.exists()
+
+        self.assertEqual(code, 0)
+        self.assertTrue(output_exists)
+
+    def test_convert_with_strict_fails_and_skips_output_when_warnings_exist(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            output_path = tmp_path / "strict_fail.pp3"
+            mapping_path = _write_warning_mapping(tmp_path / "override.json")
+
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+            with redirect_stdout(stdout), redirect_stderr(stderr):
+                code = cli_main(
+                    [
+                        "convert",
+                        str(FIXTURE_XMP),
+                        str(output_path),
+                        "--profile",
+                        "strict_test",
+                        "--mapping-file",
+                        str(mapping_path),
+                        "--strict",
+                    ]
+                )
+
+        self.assertEqual(code, STRICT_FAILURE_EXIT_CODE)
+        self.assertFalse(output_path.exists())
+        text = stdout.getvalue()
+        self.assertIn("Strict mode failed", text)
+        self.assertIn("Warnings:", text)
+
+    def test_convert_with_strict_passes_and_writes_output_without_warnings(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            output_path = tmp_path / "strict_pass.pp3"
+
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+            with redirect_stdout(stdout), redirect_stderr(stderr):
+                code = cli_main(["convert", str(FIXTURE_XMP), str(output_path), "--strict"])
+            output_exists = output_path.exists()
+
+        self.assertEqual(code, 0)
+        self.assertTrue(output_exists)
+
+    def test_convert_with_strict_and_dry_run_returns_strict_failure_code(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            output_path = tmp_path / "dry_run_fail.pp3"
+            mapping_path = _write_warning_mapping(tmp_path / "override.json")
+
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+            with redirect_stdout(stdout), redirect_stderr(stderr):
+                code = cli_main(
+                    [
+                        "convert",
+                        str(FIXTURE_XMP),
+                        str(output_path),
+                        "--profile",
+                        "strict_test",
+                        "--mapping-file",
+                        str(mapping_path),
+                        "--strict",
+                        "--dry-run",
+                    ]
+                )
+
+        self.assertEqual(code, STRICT_FAILURE_EXIT_CODE)
+        self.assertFalse(output_path.exists())
+
+    def test_convert_with_strict_does_not_emit_pp3_stdout_on_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            mapping_path = _write_warning_mapping(tmp_path / "override.json")
+
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+            with redirect_stdout(stdout), redirect_stderr(stderr):
+                code = cli_main(
+                    [
+                        "convert",
+                        str(FIXTURE_XMP),
+                        "--profile",
+                        "strict_test",
+                        "--mapping-file",
+                        str(mapping_path),
+                        "--strict",
+                        "--stdout",
+                    ]
+                )
+
+        self.assertEqual(code, STRICT_FAILURE_EXIT_CODE)
+        text = stdout.getvalue()
+        self.assertIn("Strict mode failed", text)
+        self.assertNotIn("[Version]", text)
 
 
 if __name__ == "__main__":

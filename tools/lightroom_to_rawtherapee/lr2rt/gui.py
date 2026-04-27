@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import re
 import webbrowser
+from dataclasses import dataclass
 from copy import deepcopy
 from pathlib import Path
-from tkinter import StringVar, filedialog, messagebox, ttk
+from tkinter import BooleanVar, StringVar, filedialog, messagebox, ttk
 import tkinter as tk
 
 from lr2rt.config import load_config
@@ -13,11 +14,101 @@ from lr2rt.models import ConversionResult
 from lr2rt.parsers import parse_lightroom_file
 from lr2rt.pp3_template import merge_pp3_sections, parse_pp3_file
 from lr2rt.pp3_writer import write_pp3
+from lr2rt.quality import StrictEvaluation, evaluate_strict_mode
 from lr2rt.reporting import write_html_preview
 
 SUPPORTED_EXTENSIONS = {".xmp", ".dng"}
 _DROP_TOKEN_RE = re.compile(r"\{[^}]*\}|[^\s]+")
 _DEFAULT_PREVIEW_PATH = Path.home() / ".lr2rt" / "gui_preview.html"
+
+STATUS_QUEUED = "Queued"
+STATUS_PREVIEWED = "Previewed"
+STATUS_CONVERTED = "Converted"
+STATUS_CONVERTED_WARN = "Converted (Warnings)"
+STATUS_FAILED_STRICT = "Failed (Strict)"
+STATUS_ERROR = "Error"
+
+
+@dataclass(slots=True, frozen=True)
+class QueueAddSummary:
+    added: int = 0
+    skipped_missing: int = 0
+    skipped_unsupported: int = 0
+    skipped_duplicate: int = 0
+
+
+@dataclass(slots=True)
+class QueueEntry:
+    input_path: Path
+    status: str = STATUS_QUEUED
+    warning_count: int = 0
+    output_path: Path | None = None
+    message: str = ""
+
+
+@dataclass(slots=True, frozen=True)
+class BatchConversionOutcome:
+    input_path: Path
+    status: str
+    warning_count: int
+    output_path: Path | None
+    message: str
+
+
+class ConversionQueueModel:
+    def __init__(self) -> None:
+        self._entries: list[QueueEntry] = []
+
+    def __len__(self) -> int:
+        return len(self._entries)
+
+    def entries(self) -> list[QueueEntry]:
+        return self._entries
+
+    def get(self, index: int) -> QueueEntry | None:
+        if index < 0 or index >= len(self._entries):
+            return None
+        return self._entries[index]
+
+    def add_paths(self, paths: list[Path]) -> QueueAddSummary:
+        summary = QueueAddSummary()
+        added = skipped_missing = skipped_unsupported = skipped_duplicate = 0
+
+        existing = {entry.input_path for entry in self._entries}
+        for raw_path in paths:
+            path = raw_path.expanduser().resolve()
+            if not path.exists():
+                skipped_missing += 1
+                continue
+            if not is_supported_input(path):
+                skipped_unsupported += 1
+                continue
+            if path in existing:
+                skipped_duplicate += 1
+                continue
+
+            self._entries.append(QueueEntry(input_path=path))
+            existing.add(path)
+            added += 1
+
+        return QueueAddSummary(
+            added=added,
+            skipped_missing=skipped_missing,
+            skipped_unsupported=skipped_unsupported,
+            skipped_duplicate=skipped_duplicate,
+        )
+
+    def remove_indices(self, indices: list[int]) -> int:
+        removed = 0
+        for idx in sorted(set(indices), reverse=True):
+            if idx < 0 or idx >= len(self._entries):
+                continue
+            del self._entries[idx]
+            removed += 1
+        return removed
+
+    def clear(self) -> None:
+        self._entries.clear()
 
 
 def parse_drop_paths(drop_data: str) -> list[Path]:
@@ -96,14 +187,15 @@ def _run_gui_pipeline(
     return _apply_base_profile(result, base_pp3, base_pp3_mode=base_pp3_mode)
 
 
-def run_gui_conversion(
+def run_gui_conversion_checked(
     input_path: Path,
     output_dir: Path,
     profile: str = "balanced",
     mapping_file: str | None = None,
     base_pp3: Path | None = None,
     base_pp3_mode: str = "safe",
-) -> tuple[Path, ConversionResult]:
+    strict: bool = False,
+) -> tuple[Path | None, ConversionResult, StrictEvaluation]:
     output_dir = output_dir.expanduser().resolve()
     result = _run_gui_pipeline(
         input_path=input_path,
@@ -112,11 +204,96 @@ def run_gui_conversion(
         base_pp3=base_pp3,
         base_pp3_mode=base_pp3_mode,
     )
+    strict_eval = evaluate_strict_mode(result, strict=strict)
+    if strict_eval.failed:
+        return None, result, strict_eval
 
-    output_path = build_output_path(input_path, output_dir)
+    output_path = build_output_path(Path(input_path).expanduser().resolve(), output_dir)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     write_pp3(output_path, result.pp3_sections)
+    return output_path, result, strict_eval
+
+
+def run_gui_conversion(
+    input_path: Path,
+    output_dir: Path,
+    profile: str = "balanced",
+    mapping_file: str | None = None,
+    base_pp3: Path | None = None,
+    base_pp3_mode: str = "safe",
+) -> tuple[Path, ConversionResult]:
+    output_path, result, _ = run_gui_conversion_checked(
+        input_path=input_path,
+        output_dir=output_dir,
+        profile=profile,
+        mapping_file=mapping_file,
+        base_pp3=base_pp3,
+        base_pp3_mode=base_pp3_mode,
+        strict=False,
+    )
+    if output_path is None:  # pragma: no cover - guarded by strict=False
+        raise RuntimeError("Unexpected strict failure while strict mode is disabled.")
     return output_path, result
+
+
+def run_gui_batch_conversion(
+    input_paths: list[Path],
+    output_dir: Path,
+    profile: str = "balanced",
+    mapping_file: str | None = None,
+    base_pp3: Path | None = None,
+    base_pp3_mode: str = "safe",
+    strict: bool = False,
+) -> list[BatchConversionOutcome]:
+    outcomes: list[BatchConversionOutcome] = []
+
+    for input_path in input_paths:
+        resolved_input = input_path.expanduser().resolve()
+        try:
+            output_path, result, strict_eval = run_gui_conversion_checked(
+                input_path=resolved_input,
+                output_dir=output_dir,
+                profile=profile,
+                mapping_file=mapping_file,
+                base_pp3=base_pp3,
+                base_pp3_mode=base_pp3_mode,
+                strict=strict,
+            )
+            if strict_eval.failed:
+                outcomes.append(
+                    BatchConversionOutcome(
+                        input_path=resolved_input,
+                        status="failed_strict",
+                        warning_count=len(result.warnings),
+                        output_path=None,
+                        message=strict_eval.message or "Strict mode failed.",
+                    )
+                )
+                continue
+
+            status = "converted_with_warnings" if result.warnings else "converted"
+            outcomes.append(
+                BatchConversionOutcome(
+                    input_path=resolved_input,
+                    status=status,
+                    warning_count=len(result.warnings),
+                    output_path=output_path,
+                    message="",
+                )
+            )
+
+        except Exception as exc:
+            outcomes.append(
+                BatchConversionOutcome(
+                    input_path=resolved_input,
+                    status="error",
+                    warning_count=0,
+                    output_path=None,
+                    message=str(exc),
+                )
+            )
+
+    return outcomes
 
 
 def run_gui_preview(
@@ -150,21 +327,23 @@ class ConverterWindow:
         mapping_file: str | None,
         base_pp3: Path | None,
         base_pp3_mode: str,
+        strict: bool,
     ) -> None:
         self.root = root
         self.dnd_available = dnd_available
         self.available_profiles = available_profiles
         self.profile_var = StringVar(value=profile)
+        self.strict_var = BooleanVar(value=strict)
         self.mapping_file = mapping_file
         self.base_pp3 = base_pp3
         self.base_pp3_mode = base_pp3_mode
-        self.input_var = StringVar(value="")
         self.output_dir_var = StringVar(value=str(Path.home() / "Downloads"))
-        self.status_var = StringVar(value="Drop a preset or click Browse, then preview or convert.")
+        self.status_var = StringVar(value="Add presets to the queue, then preview or convert all.")
+        self.queue = ConversionQueueModel()
 
         self.root.title("lr2rt Converter")
-        self.root.geometry("860x520")
-        self.root.minsize(820, 480)
+        self.root.geometry("980x620")
+        self.root.minsize(900, 520)
         self._configure_style()
         self._build()
 
@@ -174,168 +353,20 @@ class ConverterWindow:
         style.theme_use("clam")
 
         style.configure("App.TFrame", background="#090a0c")
-        style.configure(
-            "Card.TFrame",
-            background="#171a20",
-            borderwidth=1,
-            relief="solid",
-            bordercolor="#3b3225",
-        )
+        style.configure("Card.TFrame", background="#171a20", borderwidth=1, relief="solid", bordercolor="#3b3225")
         style.configure("ActionRow.TFrame", background="#171a20", borderwidth=0, relief="flat")
         style.configure("Title.TLabel", background="#171a20", foreground="#f5efe2", font=("Times", 19, "bold"))
         style.configure("Subtitle.TLabel", background="#171a20", foreground="#b2ab9e", font=("Times", 11))
         style.configure("Field.TLabel", background="#171a20", foreground="#d7cfbf", font=("TkDefaultFont", 10, "bold"))
         style.configure("Hint.TLabel", background="#171a20", foreground="#9f9789", font=("TkDefaultFont", 9))
-        style.configure(
-            "Status.TLabel",
-            background="#111318",
-            foreground="#e6dfd2",
-            font=("TkDefaultFont", 10),
-            padding=(10, 8),
-        )
+        style.configure("Status.TLabel", background="#111318", foreground="#e6dfd2", font=("TkDefaultFont", 10), padding=(10, 8))
+        style.configure("Input.TEntry", fieldbackground="#12151a", foreground="#f3ecdd", bordercolor="#3b3225", insertcolor="#f3ecdd", padding=(8, 6))
+        style.configure("Input.TCombobox", fieldbackground="#12151a", foreground="#f3ecdd", bordercolor="#3b3225", arrowcolor="#d3b173", padding=(8, 6))
+        style.configure("Strict.TCheckbutton", background="#171a20", foreground="#f3ecdd")
 
-        style.configure(
-            "Input.TEntry",
-            fieldbackground="#12151a",
-            foreground="#f3ecdd",
-            bordercolor="#3b3225",
-            insertcolor="#f3ecdd",
-            padding=(8, 6),
-        )
-        style.map(
-            "Input.TEntry",
-            fieldbackground=[("focus", "#181c23")],
-            bordercolor=[("focus", "#d3b173")],
-        )
-
-        style.configure(
-            "Input.TCombobox",
-            fieldbackground="#12151a",
-            foreground="#f3ecdd",
-            bordercolor="#3b3225",
-            arrowcolor="#d3b173",
-            padding=(8, 6),
-        )
-        style.map(
-            "Input.TCombobox",
-            fieldbackground=[("readonly", "#12151a"), ("focus", "#181c23")],
-            bordercolor=[("focus", "#d3b173")],
-        )
-
-        style.configure(
-            "Utility.TButton",
-            background="#21262f",
-            foreground="#ece3d2",
-            bordercolor="#4a4030",
-            lightcolor="#21262f",
-            darkcolor="#21262f",
-            focuscolor="#21262f",
-            padding=(12, 8),
-            relief="flat",
-        )
-        style.map(
-            "Utility.TButton",
-            background=[("active", "#2a313c"), ("pressed", "#1d232c")],
-            foreground=[("disabled", "#7d776d")],
-        )
-        style.configure(
-            "UtilityHover.TButton",
-            background="#2f3744",
-            foreground="#f6eddd",
-            bordercolor="#5a503d",
-            lightcolor="#2f3744",
-            darkcolor="#2f3744",
-            focuscolor="#2f3744",
-            padding=(12, 8),
-            relief="flat",
-        )
-        style.map(
-            "UtilityHover.TButton",
-            background=[("pressed", "#232a33")],
-            foreground=[("disabled", "#7d776d")],
-        )
-
-        style.configure(
-            "Secondary.TButton",
-            background="#3b2f1f",
-            foreground="#f4e5c9",
-            bordercolor="#5a462d",
-            lightcolor="#3b2f1f",
-            darkcolor="#3b2f1f",
-            focuscolor="#3b2f1f",
-            padding=(14, 8),
-            relief="flat",
-            font=("TkDefaultFont", 10, "bold"),
-        )
-        style.map(
-            "Secondary.TButton",
-            background=[("active", "#4a3a26"), ("pressed", "#332818")],
-            foreground=[("disabled", "#8d7f6b")],
-        )
-        style.configure(
-            "SecondaryHover.TButton",
-            background="#5a462d",
-            foreground="#fff3dc",
-            bordercolor="#7a613f",
-            lightcolor="#5a462d",
-            darkcolor="#5a462d",
-            focuscolor="#5a462d",
-            padding=(14, 8),
-            relief="flat",
-            font=("TkDefaultFont", 10, "bold"),
-        )
-        style.map(
-            "SecondaryHover.TButton",
-            background=[("pressed", "#473720")],
-            foreground=[("disabled", "#8d7f6b")],
-        )
-
-        style.configure(
-            "Primary.TButton",
-            background="#d3b173",
-            foreground="#090a0c",
-            bordercolor="#d3b173",
-            lightcolor="#d3b173",
-            darkcolor="#d3b173",
-            focuscolor="#d3b173",
-            padding=(16, 8),
-            relief="flat",
-            font=("TkDefaultFont", 10, "bold"),
-        )
-        style.map(
-            "Primary.TButton",
-            background=[("active", "#e0c089"), ("pressed", "#be9b5e")],
-            foreground=[("disabled", "#3c3b38")],
-        )
-        style.configure(
-            "PrimaryHover.TButton",
-            background="#e7cb95",
-            foreground="#090a0c",
-            bordercolor="#e7cb95",
-            lightcolor="#e7cb95",
-            darkcolor="#e7cb95",
-            focuscolor="#e7cb95",
-            padding=(16, 8),
-            relief="flat",
-            font=("TkDefaultFont", 10, "bold"),
-        )
-        style.map(
-            "PrimaryHover.TButton",
-            background=[("pressed", "#c8a86b")],
-            foreground=[("disabled", "#3c3b38")],
-        )
-
-    def _wire_hover_style(self, button: ttk.Button, normal_style: str, hover_style: str) -> None:
-        def on_enter(_event: object) -> None:
-            if "disabled" in button.state():
-                return
-            button.configure(style=hover_style)
-
-        def on_leave(_event: object) -> None:
-            button.configure(style=normal_style)
-
-        button.bind("<Enter>", on_enter, add="+")
-        button.bind("<Leave>", on_leave, add="+")
+        style.configure("Utility.TButton", background="#21262f", foreground="#ece3d2", bordercolor="#4a4030", lightcolor="#21262f", darkcolor="#21262f", focuscolor="#21262f", padding=(10, 7), relief="flat")
+        style.configure("Secondary.TButton", background="#3b2f1f", foreground="#f4e5c9", bordercolor="#5a462d", lightcolor="#3b2f1f", darkcolor="#3b2f1f", focuscolor="#3b2f1f", padding=(12, 8), relief="flat", font=("TkDefaultFont", 10, "bold"))
+        style.configure("Primary.TButton", background="#d3b173", foreground="#090a0c", bordercolor="#d3b173", lightcolor="#d3b173", darkcolor="#d3b173", focuscolor="#d3b173", padding=(12, 8), relief="flat", font=("TkDefaultFont", 10, "bold"))
 
     def _build(self) -> None:
         outer = ttk.Frame(self.root, style="App.TFrame", padding=22)
@@ -346,20 +377,18 @@ class ConverterWindow:
         header_card = ttk.Frame(outer, style="Card.TFrame", padding=(16, 14))
         header_card.grid(row=0, column=0, sticky="ew", pady=(0, 12))
         header_card.columnconfigure(0, weight=1)
-        ttk.Label(header_card, text="Lightroom Preset to RawTherapee", style="Title.TLabel").grid(
-            row=0, column=0, sticky="w"
-        )
+
+        ttk.Label(header_card, text="Lightroom Preset to RawTherapee", style="Title.TLabel").grid(row=0, column=0, sticky="w")
         subtitle_text = (
-            "Custom mapping loaded. Choose a profile, preview the look, then convert."
-            if self.mapping_file
-            else "Balanced profile selected. Preview first for a quick visual quality check."
+            "Queue presets, preview selected, and convert in one batch."
+            if not self.mapping_file
+            else "Queue presets with custom mapping loaded, then convert with quality controls."
         )
         ttk.Label(header_card, text=subtitle_text, style="Subtitle.TLabel").grid(row=1, column=0, sticky="w", pady=(4, 0))
 
         form_card = ttk.Frame(outer, style="Card.TFrame", padding=(16, 14))
         form_card.grid(row=1, column=0, sticky="nsew")
-        for idx, weight in enumerate((0, 1, 0)):
-            form_card.columnconfigure(idx, weight=weight)
+        form_card.columnconfigure(1, weight=1)
         form_card.rowconfigure(4, weight=1)
 
         ttk.Label(form_card, text="Profile", style="Field.TLabel").grid(row=0, column=0, sticky="w")
@@ -370,25 +399,32 @@ class ConverterWindow:
             state="readonly",
             style="Input.TCombobox",
         ).grid(row=0, column=1, sticky="ew", padx=(10, 10))
-        ttk.Label(form_card, text="Translation profile", style="Hint.TLabel").grid(
-            row=0, column=2, sticky="e"
-        )
+        ttk.Label(form_card, text="Translation profile", style="Hint.TLabel").grid(row=0, column=2, sticky="e")
 
-        ttk.Label(form_card, text="Preset (.xmp/.dng)", style="Field.TLabel").grid(row=1, column=0, sticky="w", pady=(10, 0))
-        ttk.Entry(form_card, textvariable=self.input_var, style="Input.TEntry").grid(
-            row=1, column=1, sticky="ew", padx=(10, 10), pady=(10, 0)
+        ttk.Checkbutton(
+            form_card,
+            text="Strict mode (fail conversion on warnings)",
+            variable=self.strict_var,
+            style="Strict.TCheckbutton",
+        ).grid(row=1, column=0, columnspan=2, sticky="w", pady=(10, 0))
+
+        input_actions = ttk.Frame(form_card, style="ActionRow.TFrame")
+        input_actions.grid(row=1, column=2, sticky="e", pady=(10, 0))
+        ttk.Button(input_actions, text="Add Files...", command=self._browse_input_files, style="Utility.TButton").grid(
+            row=0, column=0, padx=(0, 8)
         )
-        browse_input_btn = ttk.Button(form_card, text="Browse...", command=self._browse_input, style="Utility.TButton")
-        self._wire_hover_style(browse_input_btn, "Utility.TButton", "UtilityHover.TButton")
-        browse_input_btn.grid(row=1, column=2, sticky="ew", pady=(10, 0))
+        ttk.Button(input_actions, text="Remove Selected", command=self._remove_selected, style="Utility.TButton").grid(
+            row=0, column=1, padx=(0, 8)
+        )
+        ttk.Button(input_actions, text="Clear Queue", command=self._clear_queue, style="Utility.TButton").grid(row=0, column=2)
 
         self.drop_target = tk.Label(
             form_card,
-            text="Drag and drop a .xmp or .dng file here",
+            text="Drag and drop .xmp/.dng files to add them to the queue",
             relief=tk.SOLID,
             borderwidth=1,
             padx=14,
-            pady=18,
+            pady=12,
             anchor="center",
             bg="#101318",
             fg="#d6cdbd",
@@ -396,62 +432,113 @@ class ConverterWindow:
             highlightbackground="#3b3225",
             font=("TkDefaultFont", 10),
         )
-        self.drop_target.grid(row=2, column=0, columnspan=3, sticky="ew", pady=(12, 12))
-        if self.dnd_available:
-            self.drop_target.configure(text="Drag and drop a .xmp or .dng file here")
-        else:
-            self.drop_target.configure(text="Drag-and-drop unavailable (install tkinterdnd2). Use Browse instead.")
+        self.drop_target.grid(row=2, column=0, columnspan=3, sticky="ew", pady=(12, 10))
+        if not self.dnd_available:
+            self.drop_target.configure(text="Drag-and-drop unavailable (install tkinterdnd2). Use Add Files instead.")
 
         ttk.Label(form_card, text="Output folder", style="Field.TLabel").grid(row=3, column=0, sticky="w")
         ttk.Entry(form_card, textvariable=self.output_dir_var, style="Input.TEntry").grid(
             row=3, column=1, sticky="ew", padx=(10, 10)
         )
-        browse_output_btn = ttk.Button(
-            form_card, text="Choose...", command=self._browse_output_dir, style="Utility.TButton"
+        output_actions = ttk.Frame(form_card, style="ActionRow.TFrame")
+        output_actions.grid(row=3, column=2, sticky="e")
+        ttk.Button(output_actions, text="Choose...", command=self._browse_output_dir, style="Utility.TButton").grid(
+            row=0, column=0, padx=(0, 8)
         )
-        self._wire_hover_style(browse_output_btn, "Utility.TButton", "UtilityHover.TButton")
-        browse_output_btn.grid(row=3, column=2, sticky="ew")
+        ttk.Button(output_actions, text="Open Folder", command=self._open_output_folder, style="Utility.TButton").grid(
+            row=0, column=1
+        )
+
+        table_frame = ttk.Frame(form_card, style="ActionRow.TFrame")
+        table_frame.grid(row=4, column=0, columnspan=3, sticky="nsew", pady=(14, 0))
+        table_frame.columnconfigure(0, weight=1)
+        table_frame.rowconfigure(0, weight=1)
+
+        self.queue_table = ttk.Treeview(
+            table_frame,
+            columns=("preset", "status", "warnings", "output"),
+            show="headings",
+            selectmode="extended",
+        )
+        self.queue_table.heading("preset", text="Preset")
+        self.queue_table.heading("status", text="Status")
+        self.queue_table.heading("warnings", text="Warnings")
+        self.queue_table.heading("output", text="Output")
+        self.queue_table.column("preset", width=300, anchor="w")
+        self.queue_table.column("status", width=150, anchor="w")
+        self.queue_table.column("warnings", width=85, anchor="center")
+        self.queue_table.column("output", width=300, anchor="w")
+        self.queue_table.grid(row=0, column=0, sticky="nsew")
+
+        y_scroll = ttk.Scrollbar(table_frame, orient="vertical", command=self.queue_table.yview)
+        y_scroll.grid(row=0, column=1, sticky="ns")
+        self.queue_table.configure(yscrollcommand=y_scroll.set)
 
         action_row = ttk.Frame(form_card, style="ActionRow.TFrame")
-        action_row.grid(row=4, column=0, columnspan=3, sticky="ew", pady=(14, 0))
+        action_row.grid(row=5, column=0, columnspan=3, sticky="ew", pady=(12, 0))
         action_row.columnconfigure(0, weight=1)
         action_row.columnconfigure(1, weight=0)
         action_row.columnconfigure(2, weight=0)
         action_row.columnconfigure(3, weight=1)
-        preview_btn = ttk.Button(
-            action_row,
-            text="Preview HTML",
-            width=16,
-            command=self._preview,
-            style="Secondary.TButton",
-        )
-        self._wire_hover_style(preview_btn, "Secondary.TButton", "SecondaryHover.TButton")
-        preview_btn.grid(row=0, column=1, padx=(0, 10))
-        convert_btn = ttk.Button(
-            action_row,
-            text="Convert Preset",
-            width=16,
-            command=self._convert,
-            style="Primary.TButton",
-        )
-        self._wire_hover_style(convert_btn, "Primary.TButton", "PrimaryHover.TButton")
-        convert_btn.grid(row=0, column=2, padx=(10, 0))
 
-        ttk.Label(form_card, textvariable=self.status_var, wraplength=760, style="Status.TLabel").grid(
-            row=5, column=0, columnspan=3, sticky="ew", pady=(14, 0)
+        ttk.Button(action_row, text="Preview Selected", command=self._preview_selected, style="Secondary.TButton").grid(
+            row=0, column=1, padx=(0, 10)
+        )
+        ttk.Button(action_row, text="Convert All", command=self._convert_all, style="Primary.TButton").grid(
+            row=0, column=2, padx=(10, 0)
+        )
+
+        ttk.Label(form_card, textvariable=self.status_var, wraplength=880, style="Status.TLabel").grid(
+            row=6, column=0, columnspan=3, sticky="ew", pady=(14, 0)
         )
 
     def bind_drop(self, dnd_files_symbol: object) -> None:
         self.drop_target.drop_target_register(dnd_files_symbol)
         self.drop_target.dnd_bind("<<Drop>>", self._on_drop)
 
-    def _browse_input(self) -> None:
-        selected = filedialog.askopenfilename(
-            title="Select Lightroom preset",
+    def _selected_indices(self) -> list[int]:
+        indices: list[int] = []
+        for item_id in self.queue_table.selection():
+            try:
+                indices.append(int(item_id))
+            except ValueError:
+                continue
+        return sorted(set(indices))
+
+    def _refresh_queue_table(self) -> None:
+        for item_id in self.queue_table.get_children():
+            self.queue_table.delete(item_id)
+
+        for idx, entry in enumerate(self.queue.entries()):
+            output_text = str(entry.output_path) if entry.output_path else ""
+            self.queue_table.insert(
+                "",
+                "end",
+                iid=str(idx),
+                values=(str(entry.input_path), entry.status, str(entry.warning_count), output_text),
+            )
+
+    def _add_paths(self, paths: list[Path]) -> None:
+        summary = self.queue.add_paths(paths)
+        self._refresh_queue_table()
+
+        fragments: list[str] = [f"Added {summary.added}"]
+        if summary.skipped_duplicate:
+            fragments.append(f"duplicates {summary.skipped_duplicate}")
+        if summary.skipped_missing:
+            fragments.append(f"missing {summary.skipped_missing}")
+        if summary.skipped_unsupported:
+            fragments.append(f"unsupported {summary.skipped_unsupported}")
+
+        self.status_var.set("Queue update: " + " | ".join(fragments))
+
+    def _browse_input_files(self) -> None:
+        selected = filedialog.askopenfilenames(
+            title="Select Lightroom presets",
             filetypes=[("Lightroom Presets", "*.xmp *.dng"), ("All files", "*.*")],
         )
         if selected:
-            self._set_input(Path(selected))
+            self._add_paths([Path(path) for path in selected])
 
     def _browse_output_dir(self) -> None:
         initial_dir = self.output_dir_var.get().strip() or str(Path.home())
@@ -459,34 +546,51 @@ class ConverterWindow:
         if selected:
             self.output_dir_var.set(str(Path(selected).expanduser().resolve()))
 
+    def _open_output_folder(self) -> None:
+        output_dir = Path(self.output_dir_var.get().strip()).expanduser().resolve()
+        output_dir.mkdir(parents=True, exist_ok=True)
+        webbrowser.open_new(output_dir.as_uri())
+
+    def _remove_selected(self) -> None:
+        indices = self._selected_indices()
+        if not indices:
+            self.status_var.set("No queue rows selected.")
+            return
+
+        removed = self.queue.remove_indices(indices)
+        self._refresh_queue_table()
+        self.status_var.set(f"Removed {removed} item(s) from queue.")
+
+    def _clear_queue(self) -> None:
+        if len(self.queue) == 0:
+            self.status_var.set("Queue already empty.")
+            return
+        self.queue.clear()
+        self._refresh_queue_table()
+        self.status_var.set("Queue cleared.")
+
     def _on_drop(self, event: object) -> None:
         drop_data = getattr(event, "data", "")
-        for path in parse_drop_paths(str(drop_data)):
-            if path.exists() and is_supported_input(path):
-                self._set_input(path)
-                return
-        self.status_var.set("Dropped file is not a supported .xmp or .dng preset.")
-
-    def _set_input(self, path: Path) -> None:
-        if not is_supported_input(path):
-            self.status_var.set("Input must be .xmp or .dng.")
+        paths = parse_drop_paths(str(drop_data))
+        if not paths:
+            self.status_var.set("No files found in drop payload.")
             return
-        resolved = path.expanduser().resolve()
-        self.input_var.set(str(resolved))
-        if not self.output_dir_var.get().strip():
-            self.output_dir_var.set(str(resolved.parent))
-        self.status_var.set("Ready to preview or convert.")
+        self._add_paths(paths)
 
-    def _preview(self) -> None:
-        input_value = self.input_var.get().strip()
-        if not input_value:
-            messagebox.showerror("Missing input", "Select a .xmp or .dng file first.")
+    def _preview_selected(self) -> None:
+        indices = self._selected_indices()
+        if not indices:
+            messagebox.showerror("Missing selection", "Select a queued file to preview.")
             return
 
-        input_path = Path(input_value)
+        entry = self.queue.get(indices[0])
+        if entry is None:
+            messagebox.showerror("Missing selection", "Selected queue item is unavailable.")
+            return
+
         try:
             preview_path, result = run_gui_preview(
-                input_path=input_path,
+                input_path=entry.input_path,
                 profile=self.profile_var.get().strip() or "balanced",
                 mapping_file=self.mapping_file,
                 base_pp3=self.base_pp3,
@@ -497,37 +601,64 @@ class ConverterWindow:
             messagebox.showerror("Preview failed", str(exc))
             return
 
-        warning_text = f" | warnings: {len(result.warnings)}" if result.warnings else ""
-        self.status_var.set(f"Preview opened: {preview_path}{warning_text}")
+        entry.status = STATUS_PREVIEWED
+        entry.warning_count = len(result.warnings)
+        entry.message = f"Preview opened at {preview_path}"
+        self._refresh_queue_table()
+        self.status_var.set(f"Preview opened: {preview_path} | warnings: {len(result.warnings)}")
 
-    def _convert(self) -> None:
-        input_value = self.input_var.get().strip()
-        output_value = self.output_dir_var.get().strip()
-        if not input_value:
-            messagebox.showerror("Missing input", "Select a .xmp or .dng file first.")
+    def _convert_all(self) -> None:
+        if len(self.queue) == 0:
+            messagebox.showerror("Missing queue", "Add one or more presets to the queue first.")
             return
+
+        output_value = self.output_dir_var.get().strip()
         if not output_value:
             messagebox.showerror("Missing output folder", "Choose an output folder.")
             return
 
-        input_path = Path(input_value)
         output_dir = Path(output_value)
-        try:
-            output_path, result = run_gui_conversion(
-                input_path=input_path,
-                output_dir=output_dir,
-                profile=self.profile_var.get().strip() or "balanced",
-                mapping_file=self.mapping_file,
-                base_pp3=self.base_pp3,
-                base_pp3_mode=self.base_pp3_mode,
-            )
-        except Exception as exc:
-            messagebox.showerror("Conversion failed", str(exc))
-            return
+        profile = self.profile_var.get().strip() or "balanced"
+        strict = bool(self.strict_var.get())
 
-        warning_text = f" | warnings: {len(result.warnings)}" if result.warnings else ""
-        self.status_var.set(f"Saved {output_path.name} to {output_path.parent}{warning_text}")
-        messagebox.showinfo("Conversion complete", f"Created:\n{output_path}")
+        converted = failed = errors = skipped = 0
+
+        for entry in self.queue.entries():
+            try:
+                output_path, result, strict_eval = run_gui_conversion_checked(
+                    input_path=entry.input_path,
+                    output_dir=output_dir,
+                    profile=profile,
+                    mapping_file=self.mapping_file,
+                    base_pp3=self.base_pp3,
+                    base_pp3_mode=self.base_pp3_mode,
+                    strict=strict,
+                )
+                entry.warning_count = len(result.warnings)
+
+                if strict_eval.failed:
+                    entry.status = STATUS_FAILED_STRICT
+                    entry.output_path = None
+                    entry.message = strict_eval.message or "Strict mode failed."
+                    failed += 1
+                else:
+                    entry.status = STATUS_CONVERTED_WARN if result.warnings else STATUS_CONVERTED
+                    entry.output_path = output_path
+                    entry.message = ""
+                    converted += 1
+
+            except Exception as exc:
+                entry.status = STATUS_ERROR
+                entry.warning_count = 0
+                entry.output_path = None
+                entry.message = str(exc)
+                errors += 1
+
+        self._refresh_queue_table()
+        self.status_var.set(
+            "Batch complete. "
+            f"Converted: {converted} | Failed: {failed} | Errors: {errors} | Skipped: {skipped}"
+        )
 
 
 def launch_gui(
@@ -535,6 +666,7 @@ def launch_gui(
     mapping_file: str | None = None,
     base_pp3: Path | None = None,
     base_pp3_mode: str = "safe",
+    strict: bool = False,
 ) -> None:
     override_path = Path(mapping_file).expanduser().resolve() if mapping_file else None
     config = load_config(override_path)
@@ -566,6 +698,7 @@ def launch_gui(
         mapping_file=mapping_file,
         base_pp3=base_pp3,
         base_pp3_mode=base_pp3_mode,
+        strict=strict,
     )
     if dnd_available and dnd_files_symbol is not None:
         app.bind_drop(dnd_files_symbol)

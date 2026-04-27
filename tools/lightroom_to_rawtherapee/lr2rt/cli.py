@@ -13,6 +13,7 @@ from lr2rt.models import ConversionResult
 from lr2rt.parsers import parse_lightroom_file
 from lr2rt.pp3_writer import serialize_pp3, write_pp3
 from lr2rt.pp3_template import merge_pp3_sections, parse_pp3_file
+from lr2rt.quality import STRICT_FAILURE_EXIT_CODE, evaluate_strict_mode
 from lr2rt.reporting import render_terminal_preview, write_html_preview
 
 
@@ -77,6 +78,11 @@ def _build_parser() -> argparse.ArgumentParser:
     convert_parser.add_argument("--dry-run", action="store_true", help="Run conversion but do not write output file")
     convert_parser.add_argument("--html-report", type=Path, help="Optional output path for HTML preview report")
     convert_parser.add_argument("--stdout", action="store_true", help="Print PP3 content to stdout")
+    convert_parser.add_argument(
+        "--strict",
+        action="store_true",
+        help="Fail conversion if any warnings are produced and skip writing output.",
+    )
 
     gui_parser = subparsers.add_parser("gui", help="Open a simple desktop UI for drag-and-drop conversion")
     gui_parser.add_argument("--profile", default="balanced", help="Mapping profile name (default: balanced)")
@@ -95,6 +101,11 @@ def _build_parser() -> argparse.ArgumentParser:
             "'safe' keeps compatibility structure while preventing template look leakage (default). "
             "'preserve' keeps all base values and only overrides mapped keys."
         ),
+    )
+    gui_parser.add_argument(
+        "--strict",
+        action="store_true",
+        help="Open GUI with strict mode enabled by default.",
     )
 
     return parser
@@ -218,9 +229,7 @@ def _resolve_output_path(input_file: Path, output_arg: Path | None) -> Path:
 
 def _handle_convert_command(args: Any, input_file: Path, result: ConversionResult) -> int:
     output_path = _resolve_output_path(input_file, args.output)
-
-    if args.stdout:
-        print(serialize_pp3(result.pp3_sections), end="")
+    strict_eval = evaluate_strict_mode(result, strict=bool(args.strict))
 
     if args.html_report:
         output_html = _write_html_report(result, args.html_report)
@@ -228,8 +237,19 @@ def _handle_convert_command(args: Any, input_file: Path, result: ConversionResul
 
     if args.dry_run:
         print("Dry run complete. PP3 was not written.")
+        if strict_eval.failed:
+            print(f"Strict mode failed: {strict_eval.message}")
         print(render_terminal_preview(result))
-        return 0
+        return STRICT_FAILURE_EXIT_CODE if strict_eval.failed else 0
+
+    if strict_eval.failed:
+        print(f"Strict mode failed: {strict_eval.message}")
+        _print_warnings(result)
+        print(f"Skipped writing output file: {output_path}")
+        return STRICT_FAILURE_EXIT_CODE
+
+    if args.stdout:
+        print(serialize_pp3(result.pp3_sections), end="")
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     write_pp3(output_path, result.pp3_sections)
@@ -255,6 +275,7 @@ def main(argv: list[str] | None = None) -> int:
                 mapping_file=args.mapping_file,
                 base_pp3=args.base_pp3,
                 base_pp3_mode=args.base_pp3_mode,
+                strict=bool(args.strict),
             )
             return 0
 

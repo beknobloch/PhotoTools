@@ -30,11 +30,17 @@ Direct translation between Lightroom and RawTherapee settings is approximate. Th
 - split toning to `ColorToning`
 - vignette, distortion, perspective, and defringing basics
 - range-aware output clamping based on a central RawTherapee value catalog
+- strict conversion mode (`--strict`) that fails when any warnings are produced
 - HTML preview range visualization for numeric values (disabled slider + min/default/max labels)
 - Provides warning and coverage feedback:
   - missing source keys
   - defaults applied
   - unmapped source metadata keys
+- GUI queue workflow:
+  - add many files via browse or drag-and-drop
+  - preview selected queue item
+  - convert all queued files with per-row status and warning counts
+  - optional strict mode toggle in the GUI
 
 ## Install / run
 
@@ -96,7 +102,13 @@ Convert with a different profile:
 python3 -m lr2rt convert /path/to/preset.xmp ./output.pp3 --profile aggressive
 ```
 
-Open the simple desktop UI (drag `.xmp/.dng`, choose output folder, choose profile, preview, convert):
+Run strict conversion (fails if any warnings are present and does not write `.pp3`):
+
+```bash
+python3 -m lr2rt convert /path/to/preset.xmp ./output.pp3 --strict
+```
+
+Open the desktop UI (queue `.xmp/.dng` files, choose output folder/profile, preview selected, convert all):
 
 ```bash
 python3 -m lr2rt gui
